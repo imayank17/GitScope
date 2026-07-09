@@ -1,17 +1,42 @@
+from contextlib import asynccontextmanager
+
+import httpx
 from fastapi import FastAPI
+
 from app.core.config import settings
 from app.routers import github
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- Startup ---
+    app.state.http_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(30.0),     # 30s total timeout
+        follow_redirects=True,            # Follow GitHub redirects
+    )
+
+    yield  # App runs here — handles requests
+
+    # --- Shutdown ---
+    await app.state.http_client.aclose()
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="GitHub Repository Analytics Platform"
+    description="GitHub Repository Analytics Platform",
+    lifespan=lifespan,
 )
 
+
+#Register Routers-------
+
+app.include_router(github.router)
 
 @app.get("/")
 def root():
     return {
-       "application": settings.APP_NAME,
+        "application": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "debug": settings.DEBUG,
     }
@@ -20,7 +45,5 @@ def root():
 @app.get("/health")
 def health_check():
     return {
-        "status": "healthy"
+        "status": "healthy",
     }
-
-app.include_router(github.router)

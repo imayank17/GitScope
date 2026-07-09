@@ -16,8 +16,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     REFRESH_TOKEN_EXPIRE_DAYS: int
 
-    #Github
-    GITHUB_TOKEN:str
+    # GitHub
+    GITHUB_TOKEN: str | None = None
+    GITHUB_API_BASE_URL: str = "https://api.github.com"
 
     model_config = SettingsConfigDict(
         env_file=".env",
