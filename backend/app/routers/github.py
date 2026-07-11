@@ -1,28 +1,68 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+"""
+GitHub Router
+-------------
+HTTP endpoints for GitHub repository operations.
+  POST /repositories/analyze              — Analyze a repo (URL or owner/repo)
+  GET  /github/{owner}/{repo}             — Quick lookup by owner and repo
+  GET  /repositories/{owner}/{repo}/contributors  — List contributors
+  GET  /repositories/{owner}/{repo}/commits       — List commits
+  GET  /repositories/{owner}/{repo}/languages     — Language breakdown
+  GET  /repositories/{owner}/{repo}/pulls         — List pull requests
+  GET  /repositories/{owner}/{repo}/issues        — List issues
+"""
+
+from enum import Enum
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.dependencies import get_github_repository
 from app.repositories.github_repository import GitHubRepository
-from app.schemas.github import RepositoryAnalyzeRequest, RepositoryResponse
+from app.schemas.github import (
+    CommitResponse,
+    ContributorResponse,
+    IssueResponse,
+    LanguageResponse,
+    PaginatedResponse,
+    PullRequestResponse,
+    RepositoryAnalyzeRequest,
+    RepositoryResponse,
+)
 
 
 router = APIRouter(tags=["GitHub"])
 
 
-# Helper — parse "owner/repo" from various input formats
+# Enums for query parameters
+
+class StateFilter(str, Enum):
+    """Valid states for filtering pull requests and issues."""
+    open = "open"
+    closed = "closed"
+    all = "all"
+
+
+# Private helpers — URL parsing & response building
 
 def _parse_repo_url(repo_url: str) -> tuple[str, str]:
-   
-    # Strip whitespace and trailing slashes
+    """
+    Extract (owner, repo) from a user-provided string.
+
+    Supports:
+      • "fastapi/fastapi"
+      • "https://github.com/fastapi/fastapi"
+      • "https://github.com/fastapi/fastapi/" (trailing slash)
+      • "github.com/fastapi/fastapi"
+
+    Raises:
+        HTTPException 422: If the string can't be parsed into owner/repo.
+    """
     url = repo_url.strip().rstrip("/")
 
-    # Full URL format — extract the path portion
     if "github.com" in url:
-        # Split on "github.com/" and take everything after
         parts = url.split("github.com/")
         if len(parts) == 2:
             url = parts[1]
 
-    # Now we should have "owner/repo"
     segments = url.split("/")
 
     if len(segments) != 2 or not segments[0] or not segments[1]:
@@ -35,16 +75,8 @@ def _parse_repo_url(repo_url: str) -> tuple[str, str]:
     return segments[0], segments[1]
 
 
-
-# Helper — map raw GitHub API data → RepositoryResponse schema
-
-
-def _build_response(data: dict) -> RepositoryResponse:
-    """
-    Map GitHub's raw JSON to our clean RepositoryResponse schema.
-
-    This keeps the mapping logic in one place — both endpoints reuse it.
-    """
+def _build_repo_response(data: dict) -> RepositoryResponse:
+    """Map GitHub's raw repo JSON → RepositoryResponse."""
     return RepositoryResponse(
         name=data["name"],
         full_name=data["full_name"],
@@ -66,8 +98,94 @@ def _build_response(data: dict) -> RepositoryResponse:
     )
 
 
-# Endpoints
+def _build_contributor(data: dict) -> ContributorResponse:
+    """Map a single GitHub contributor object → ContributorResponse."""
+    return ContributorResponse(
+        login=data["login"],
+        avatar_url=data["avatar_url"],
+        contributions=data["contributions"],
+        html_url=data["html_url"],
+    )
 
+
+def _build_commit(data: dict) -> CommitResponse:
+    """
+    Map a single GitHub commit object → CommitResponse.
+
+    GitHub nests commit data deeply:
+      data["commit"]["author"]["name"]  → author_name
+      data["commit"]["author"]["email"] → author_email
+    We flatten this into a clean, flat schema.
+    """
+    commit_data = data["commit"]
+    return CommitResponse(
+        sha=data["sha"],
+        message=commit_data["message"],
+        author_name=commit_data["author"]["name"],
+        author_email=commit_data["author"]["email"],
+        author_date=commit_data["author"]["date"],
+        committer_name=commit_data["committer"]["name"],
+        html_url=data["html_url"],
+    )
+
+
+def _build_language_response(raw_languages: dict) -> LanguageResponse:
+    """
+    Build a LanguageResponse from GitHub's raw language dict.
+
+    GitHub returns: {"Python": 150234, "JavaScript": 48012}
+    We add:
+      total_bytes  = 198246
+      percentages  = {"Python": 75.77, "JavaScript": 24.23}
+    """
+    total = sum(raw_languages.values()) if raw_languages else 0
+
+    percentages = {}
+    if total > 0:
+        percentages = {
+            lang: round((byte_count / total) * 100, 2)
+            for lang, byte_count in raw_languages.items()
+        }
+
+    return LanguageResponse(
+        languages=raw_languages,
+        total_bytes=total,
+        percentages=percentages,
+    )
+
+
+def _build_pull_request(data: dict) -> PullRequestResponse:
+    """Map a single GitHub PR object → PullRequestResponse."""
+    return PullRequestResponse(
+        number=data["number"],
+        title=data["title"],
+        state=data["state"],
+        user_login=data["user"]["login"],
+        created_at=data["created_at"],
+        updated_at=data["updated_at"],
+        html_url=data["html_url"],
+        labels=[label["name"] for label in data.get("labels", [])],
+        merged_at=data.get("merged_at"),
+        draft=data.get("draft", False),
+    )
+
+
+def _build_issue(data: dict) -> IssueResponse:
+    """Map a single GitHub issue object → IssueResponse."""
+    return IssueResponse(
+        number=data["number"],
+        title=data["title"],
+        state=data["state"],
+        user_login=data["user"]["login"],
+        created_at=data["created_at"],
+        updated_at=data["updated_at"],
+        html_url=data["html_url"],
+        labels=[label["name"] for label in data.get("labels", [])],
+        comments=data.get("comments", 0),
+    )
+
+
+#  Endpoints (unchanged)
 
 @router.post(
     "/repositories/analyze",
@@ -81,10 +199,9 @@ async def analyze_repository(
     request: RepositoryAnalyzeRequest,
     repository: GitHubRepository = Depends(get_github_repository),
 ) -> RepositoryResponse:
-    
     owner, repo = _parse_repo_url(request.repo_url)
     data = await repository.get_repo(owner, repo)
-    return _build_response(data)
+    return _build_repo_response(data)
 
 
 @router.get(
@@ -98,8 +215,155 @@ async def repository_details(
     repo: str,
     repository: GitHubRepository = Depends(get_github_repository),
 ) -> RepositoryResponse:
-    """
-    Quick lookup endpoint — owner and repo as path parameters.
-    """
     data = await repository.get_repo(owner, repo)
-    return _build_response(data)
+    return _build_repo_response(data)
+
+
+#  Endpoints — Contributors
+
+@router.get(
+    "/repositories/{owner}/{repo}/contributors",
+    response_model=PaginatedResponse,
+    summary="List repository contributors",
+    description="Fetch contributors sorted by number of contributions. "
+                "Supports pagination via page and per_page query params.",
+)
+async def list_contributors(
+    owner: str,
+    repo: str,
+    page: int = Query(default=1, ge=1, description="Page number (1-indexed)."),
+    per_page: int = Query(
+        default=30, ge=1, le=100,
+        description="Results per page (max 100).",
+    ),
+    repository: GitHubRepository = Depends(get_github_repository),
+) -> PaginatedResponse:
+    items, total_pages = await repository.get_contributors(
+        owner, repo, page, per_page,
+    )
+
+    return PaginatedResponse(
+        items=[_build_contributor(c) for c in items],
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+    )
+
+
+#Endpoints — Commits
+
+@router.get(
+    "/repositories/{owner}/{repo}/commits",
+    response_model=PaginatedResponse,
+    summary="List repository commits",
+    description="Fetch commits ordered by date (most recent first). "
+                "Supports pagination via page and per_page query params.",
+)
+async def list_commits(
+    owner: str,
+    repo: str,
+    page: int = Query(default=1, ge=1, description="Page number (1-indexed)."),
+    per_page: int = Query(
+        default=30, ge=1, le=100,
+        description="Results per page (max 100).",
+    ),
+    repository: GitHubRepository = Depends(get_github_repository),
+) -> PaginatedResponse:
+    items, total_pages = await repository.get_commits(
+        owner, repo, page, per_page,
+    )
+
+    return PaginatedResponse(
+        items=[_build_commit(c) for c in items],
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+    )
+
+
+# Endpoints — Languages
+
+@router.get(
+    "/repositories/{owner}/{repo}/languages",
+    response_model=LanguageResponse,
+    summary="Get repository language breakdown",
+    description="Fetch the language composition of a repository. "
+                "Returns raw byte counts and calculated percentages.",
+)
+async def get_languages(
+    owner: str,
+    repo: str,
+    repository: GitHubRepository = Depends(get_github_repository),
+) -> LanguageResponse:
+    raw_languages = await repository.get_languages(owner, repo)
+    return _build_language_response(raw_languages)
+
+
+#  Endpoints — Pull Requests
+
+@router.get(
+    "/repositories/{owner}/{repo}/pulls",
+    response_model=PaginatedResponse,
+    summary="List repository pull requests",
+    description="Fetch pull requests filtered by state. "
+                "Supports pagination via page and per_page query params.",
+)
+async def list_pull_requests(
+    owner: str,
+    repo: str,
+    state: StateFilter = Query(
+        default=StateFilter.open,
+        description="Filter by PR state: 'open', 'closed', or 'all'.",
+    ),
+    page: int = Query(default=1, ge=1, description="Page number (1-indexed)."),
+    per_page: int = Query(
+        default=30, ge=1, le=100,
+        description="Results per page (max 100).",
+    ),
+    repository: GitHubRepository = Depends(get_github_repository),
+) -> PaginatedResponse:
+    items, total_pages = await repository.get_pull_requests(
+        owner, repo, state.value, page, per_page,
+    )
+
+    return PaginatedResponse(
+        items=[_build_pull_request(pr) for pr in items],
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+    )
+
+
+# Endpoints — Issues
+
+@router.get(
+    "/repositories/{owner}/{repo}/issues",
+    response_model=PaginatedResponse,
+    summary="List repository issues",
+    description="Fetch issues (excluding pull requests) filtered by state. "
+                "Supports pagination via page and per_page query params.",
+)
+async def list_issues(
+    owner: str,
+    repo: str,
+    state: StateFilter = Query(
+        default=StateFilter.open,
+        description="Filter by issue state: 'open', 'closed', or 'all'.",
+    ),
+    page: int = Query(default=1, ge=1, description="Page number (1-indexed)."),
+    per_page: int = Query(
+        default=30, ge=1, le=100,
+        description="Results per page (max 100).",
+    ),
+    repository: GitHubRepository = Depends(get_github_repository),
+) -> PaginatedResponse:
+    items, total_pages = await repository.get_issues(
+        owner, repo, state.value, page, per_page,
+    )
+
+    return PaginatedResponse(
+        items=[_build_issue(issue) for issue in items],
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+    )
