@@ -75,64 +75,96 @@ def _parse_repo_url(repo_url: str) -> tuple[str, str]:
     return segments[0], segments[1]
 
 
-def _build_repo_response(data: dict) -> RepositoryResponse:
-    """Map GitHub's raw repo JSON → RepositoryResponse."""
-    return RepositoryResponse(
-        name=data["name"],
-        full_name=data["full_name"],
-        description=data.get("description"),
-        language=data.get("language"),
-        stars=data["stargazers_count"],
-        forks=data["forks_count"],
-        open_issues=data["open_issues_count"],
-        watchers=data["watchers_count"],
-        topics=data.get("topics", []),
-        visibility=data.get("visibility", "public"),
-        default_branch=data.get("default_branch", "main"),
-        created_at=data["created_at"],
-        updated_at=data["updated_at"],
-        html_url=data["html_url"],
-        clone_url=data["clone_url"],
-        owner_login=data["owner"]["login"],
-        owner_avatar_url=data["owner"]["avatar_url"],
-    )
+def _build_repo_response(data) -> RepositoryResponse:
+    """Map either GitHub's raw repo JSON or database Repository model → RepositoryResponse."""
+    if isinstance(data, dict):
+        return RepositoryResponse(
+            name=data["name"],
+            full_name=data["full_name"],
+            description=data.get("description"),
+            language=data.get("language"),
+            stars=data["stargazers_count"],
+            forks=data["forks_count"],
+            open_issues=data["open_issues_count"],
+            watchers=data["watchers_count"],
+            topics=data.get("topics", []),
+            visibility=data.get("visibility", "public"),
+            default_branch=data.get("default_branch", "main"),
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+            html_url=data["html_url"],
+            clone_url=data["clone_url"],
+            owner_login=data["owner"]["login"],
+            owner_avatar_url=data["owner"]["avatar_url"],
+        )
+    else:
+        return RepositoryResponse(
+            name=data.name,
+            full_name=data.full_name,
+            description=data.description,
+            language=data.language,
+            stars=data.stars,
+            forks=data.forks,
+            open_issues=data.open_issues,
+            watchers=data.watchers,
+            topics=data.topics or [],
+            visibility=data.visibility,
+            default_branch=data.default_branch,
+            created_at=data.github_created_at or data.created_at.isoformat(),
+            updated_at=data.github_updated_at or data.updated_at.isoformat(),
+            html_url=data.html_url,
+            clone_url=data.clone_url,
+            owner_login=data.owner_login,
+            owner_avatar_url=data.owner_avatar_url,
+        )
 
 
-def _build_contributor(data: dict) -> ContributorResponse:
-    """Map a single GitHub contributor object → ContributorResponse."""
-    return ContributorResponse(
-        login=data["login"],
-        avatar_url=data["avatar_url"],
-        contributions=data["contributions"],
-        html_url=data["html_url"],
-    )
+def _build_contributor(data) -> ContributorResponse:
+    """Map either GitHub contributor dict or Contributor model → ContributorResponse."""
+    if isinstance(data, dict):
+        return ContributorResponse(
+            login=data["login"],
+            avatar_url=data["avatar_url"],
+            contributions=data["contributions"],
+            html_url=data["html_url"],
+        )
+    else:
+        return ContributorResponse(
+            login=data.login,
+            avatar_url=data.avatar_url,
+            contributions=data.contributions,
+            html_url=data.html_url,
+        )
 
 
-def _build_commit(data: dict) -> CommitResponse:
-    """
-    Map a single GitHub commit object → CommitResponse.
-
-    GitHub nests commit data deeply:
-      data["commit"]["author"]["name"]  → author_name
-      data["commit"]["author"]["email"] → author_email
-    We flatten this into a clean, flat schema.
-    """
-    commit_data = data["commit"]
-    return CommitResponse(
-        sha=data["sha"],
-        message=commit_data["message"],
-        author_name=commit_data["author"]["name"],
-        author_email=commit_data["author"]["email"],
-        author_date=commit_data["author"]["date"],
-        committer_name=commit_data["committer"]["name"],
-        html_url=data["html_url"],
-    )
+def _build_commit(data) -> CommitResponse:
+    """Map either GitHub commit dict or Commit model → CommitResponse."""
+    if isinstance(data, dict):
+        commit_data = data["commit"]
+        return CommitResponse(
+            sha=data["sha"],
+            message=commit_data["message"],
+            author_name=commit_data["author"]["name"],
+            author_email=commit_data["author"]["email"],
+            author_date=commit_data["author"]["date"],
+            committer_name=commit_data["committer"]["name"],
+            html_url=data["html_url"],
+        )
+    else:
+        return CommitResponse(
+            sha=data.sha,
+            message=data.message,
+            author_name=data.author_name,
+            author_email=data.author_email,
+            author_date=data.author_date,
+            committer_name=data.committer_name,
+            html_url=data.html_url,
+        )
 
 
 def _build_language_response(raw_languages: dict) -> LanguageResponse:
     """
-    Build a LanguageResponse from GitHub's raw language dict.
-
+    Build a LanguageResponse from raw language dict.
     GitHub returns: {"Python": 150234, "JavaScript": 48012}
     We add:
       total_bytes  = 198246
@@ -154,35 +186,62 @@ def _build_language_response(raw_languages: dict) -> LanguageResponse:
     )
 
 
-def _build_pull_request(data: dict) -> PullRequestResponse:
-    """Map a single GitHub PR object → PullRequestResponse."""
-    return PullRequestResponse(
-        number=data["number"],
-        title=data["title"],
-        state=data["state"],
-        user_login=data["user"]["login"],
-        created_at=data["created_at"],
-        updated_at=data["updated_at"],
-        html_url=data["html_url"],
-        labels=[label["name"] for label in data.get("labels", [])],
-        merged_at=data.get("merged_at"),
-        draft=data.get("draft", False),
-    )
+def _build_pull_request(data) -> PullRequestResponse:
+    """Map either GitHub PR dict or PullRequest model → PullRequestResponse."""
+    if isinstance(data, dict):
+        return PullRequestResponse(
+            number=data["number"],
+            title=data["title"],
+            state=data["state"],
+            user_login=data["user"]["login"],
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+            html_url=data["html_url"],
+            labels=[label["name"] for label in data.get("labels", [])],
+            merged_at=data.get("merged_at"),
+            draft=data.get("draft", False),
+        )
+    else:
+        return PullRequestResponse(
+            number=data.number,
+            title=data.title,
+            state=data.state,
+            user_login=data.user_login,
+            created_at=data.github_created_at or data.created_at.isoformat(),
+            updated_at=data.github_updated_at or data.created_at.isoformat(),
+            html_url=data.html_url,
+            labels=data.labels or [],
+            merged_at=data.merged_at,
+            draft=data.draft,
+        )
 
 
-def _build_issue(data: dict) -> IssueResponse:
-    """Map a single GitHub issue object → IssueResponse."""
-    return IssueResponse(
-        number=data["number"],
-        title=data["title"],
-        state=data["state"],
-        user_login=data["user"]["login"],
-        created_at=data["created_at"],
-        updated_at=data["updated_at"],
-        html_url=data["html_url"],
-        labels=[label["name"] for label in data.get("labels", [])],
-        comments=data.get("comments", 0),
-    )
+def _build_issue(data) -> IssueResponse:
+    """Map either GitHub issue dict or Issue model → IssueResponse."""
+    if isinstance(data, dict):
+        return IssueResponse(
+            number=data["number"],
+            title=data["title"],
+            state=data["state"],
+            user_login=data["user"]["login"],
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+            html_url=data["html_url"],
+            labels=[label["name"] for label in data.get("labels", [])],
+            comments=data.get("comments", 0),
+        )
+    else:
+        return IssueResponse(
+            number=data.number,
+            title=data.title,
+            state=data.state,
+            user_login=data.user_login,
+            created_at=data.github_created_at or data.created_at.isoformat(),
+            updated_at=data.github_updated_at or data.created_at.isoformat(),
+            html_url=data.html_url,
+            labels=data.labels or [],
+            comments=data.comments,
+        )
 
 
 #  Endpoints (unchanged)
@@ -296,6 +355,8 @@ async def get_languages(
     repository: GitHubRepository = Depends(get_github_repository),
 ) -> LanguageResponse:
     raw_languages = await repository.get_languages(owner, repo)
+    if isinstance(raw_languages, list):
+        raw_languages = {lang.name: lang.bytes for lang in raw_languages}
     return _build_language_response(raw_languages)
 
 

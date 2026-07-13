@@ -15,6 +15,14 @@ async def lifespan(app: FastAPI):
         follow_redirects=True,            # Follow GitHub redirects
     )
 
+    # Automatically create tables in PostgreSQL on startup
+    from app.database import Base
+    from app.database.session import engine
+    import app.models  # noqa: F401 (Ensure models are registered with Base.metadata)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     yield  # App runs here — handles requests
 
     # --- Shutdown ---
