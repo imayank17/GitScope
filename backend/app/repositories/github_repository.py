@@ -1,4 +1,5 @@
 import math
+from datetime import datetime
 from typing import Dict, List, Tuple, Union
 
 from sqlalchemy import func, select
@@ -10,6 +11,7 @@ from app.models.issue import Issue
 from app.models.language import Language
 from app.models.pull_request import PullRequest
 from app.models.repository import Repository
+from app.models.snapshot import RepositorySnapshot
 from app.services.github_service import GitHubService
 
 
@@ -94,6 +96,8 @@ class GitHubRepository:
             topics=repo_data.get("topics", []),
             github_created_at=repo_data["created_at"],
             github_updated_at=repo_data["updated_at"],
+            sync_status="COMPLETED",
+            last_synced_at=datetime.utcnow(),
         )
 
         # Build child objects via SQLAlchemy relationship back-populates
@@ -169,6 +173,19 @@ class GitHubRepository:
                 percentage=round((bytes_count / total_bytes) * 100, 2) if total_bytes > 0 else 0.0,
             )
             for lang, bytes_count in languages_data.items()
+        ]
+
+        # Add initial daily metrics snapshot
+        new_repo.snapshots = [
+            RepositorySnapshot(
+                date=datetime.utcnow().date(),
+                stars=new_repo.stars,
+                forks=new_repo.forks,
+                open_issues=new_repo.open_issues,
+                watchers=new_repo.watchers,
+                commit_count=len(new_repo.commits),
+                pull_request_count=len(new_repo.pull_requests),
+            )
         ]
 
         self.db.add(new_repo)
