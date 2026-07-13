@@ -12,6 +12,8 @@ Pydantic models for request validation and response serialization.
   IssueResponse             — issue info
 """
 
+import uuid
+import datetime
 from pydantic import BaseModel, Field
 
 
@@ -32,7 +34,7 @@ class RepositoryAnalyzeRequest(BaseModel):
 
 
 class RepositoryResponse(BaseModel):
-
+    id: uuid.UUID | None = None
     name: str
     full_name: str
     description: str | None = None
@@ -206,3 +208,38 @@ class IssueResponse(BaseModel):
         default=0,
         description="Number of comments on this issue.",
     )
+
+
+# New Synchronization & Analytics Schemas
+
+import uuid
+import datetime
+
+class SyncStatusResponse(BaseModel):
+    repository_id: uuid.UUID
+    status: str
+    last_synced_at: datetime.datetime | None = None
+    error: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class RepositorySnapshotResponse(BaseModel):
+    id: uuid.UUID
+    repository_id: uuid.UUID
+    date: datetime.date
+    stars: int
+    forks: int
+    open_issues: int
+    watchers: int
+    commit_count: int
+    pull_request_count: int
+    created_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RepositoryRefreshResponse(BaseModel):
+    repository_id: uuid.UUID
+    status: str
+    message: str

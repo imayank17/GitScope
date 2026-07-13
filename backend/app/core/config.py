@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # GitHub
     GITHUB_TOKEN: str | None = None
     GITHUB_API_BASE_URL: str = "https://api.github.com"
+    SYNC_TTL_SECONDS: int = 3600
 
     model_config = SettingsConfigDict(
         env_file=".env",

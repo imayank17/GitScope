@@ -4,6 +4,7 @@ from app.models.commit import Commit
 from app.models.issue import Issue
 from app.models.pull_request import PullRequest
 from app.models.language import Language
+from app.models.snapshot import RepositorySnapshot
 
 __all__ = [
     "Repository",
@@ -12,4 +13,5 @@ __all__ = [
     "Issue",
     "PullRequest",
     "Language",
+    "RepositorySnapshot",
 ]

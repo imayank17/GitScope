@@ -76,6 +76,21 @@ class Repository(Base):
         nullable=False,
     )
 
+    # Sync fields
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    sync_status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="PENDING",
+    )
+    sync_error: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
     # Relationships (Cascade deletes children if repository is deleted)
     contributors: Mapped[List["Contributor"]] = relationship(
         "Contributor",
@@ -99,6 +114,11 @@ class Repository(Base):
     )
     languages: Mapped[List["Language"]] = relationship(
         "Language",
+        back_populates="repository",
+        cascade="all, delete-orphan",
+    )
+    snapshots: Mapped[List["RepositorySnapshot"]] = relationship(
+        "RepositorySnapshot",
         back_populates="repository",
         cascade="all, delete-orphan",
     )

@@ -11,12 +11,25 @@ HTTP endpoints for GitHub repository operations.
   GET  /repositories/{owner}/{repo}/issues        — List issues
 """
 
+import uuid
+from datetime import datetime, timezone
 from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_github_repository
+from app.core.config import settings
+from app.database.session import get_db
+from app.core.dependencies import (
+    get_github_repository,
+    get_sync_service,
+    get_analytics_service,
+)
 from app.repositories.github_repository import GitHubRepository
+from app.services.sync_service import SynchronizationService
+from app.services.analytics_service import AnalyticsService
+from app.models.repository import Repository
 from app.schemas.github import (
     CommitResponse,
     ContributorResponse,
@@ -26,6 +39,9 @@ from app.schemas.github import (
     PullRequestResponse,
     RepositoryAnalyzeRequest,
     RepositoryResponse,
+    SyncStatusResponse,
+    RepositorySnapshotResponse,
+    RepositoryRefreshResponse,
 )
 
 
@@ -79,6 +95,7 @@ def _build_repo_response(data) -> RepositoryResponse:
     """Map either GitHub's raw repo JSON or database Repository model → RepositoryResponse."""
     if isinstance(data, dict):
         return RepositoryResponse(
+            id=None,
             name=data["name"],
             full_name=data["full_name"],
             description=data.get("description"),
@@ -99,6 +116,7 @@ def _build_repo_response(data) -> RepositoryResponse:
         )
     else:
         return RepositoryResponse(
+            id=data.id,
             name=data.name,
             full_name=data.full_name,
             description=data.description,
@@ -246,6 +264,41 @@ def _build_issue(data) -> IssueResponse:
 
 #  Endpoints (unchanged)
 
+async def _get_or_analyze_repo(
+    owner: str,
+    repo: str,
+    db: AsyncSession,
+    repository: GitHubRepository,
+    sync_service: SynchronizationService,
+    background_tasks: BackgroundTasks,
+) -> Repository:
+    from sqlalchemy import func
+    stmt = select(Repository).where(func.lower(Repository.full_name) == f"{owner}/{repo}".lower())
+    db_repo = (await db.execute(stmt)).scalars().first()
+
+    if not db_repo:
+        # Does not exist, run full synchronous fetch and insert
+        db_repo = await repository.get_repo(owner, repo)
+        return db_repo
+
+    # Exists: check freshness
+    now = datetime.now(timezone.utc)
+    last_synced = db_repo.last_synced_at
+    if last_synced and last_synced.tzinfo is None:
+        last_synced = last_synced.replace(tzinfo=timezone.utc)
+
+    is_fresh = last_synced is not None and (now - last_synced).total_seconds() < settings.SYNC_TTL_SECONDS
+
+    if not is_fresh:
+        # Stale: trigger background revalidation
+        if db_repo.sync_status != "SYNCING":
+            db_repo.sync_status = "SYNCING"
+            await db.commit()
+            background_tasks.add_task(sync_service.sync_repository_task, db_repo.id)
+
+    return db_repo
+
+
 @router.post(
     "/repositories/analyze",
     response_model=RepositoryResponse,
@@ -256,10 +309,15 @@ def _build_issue(data) -> IssueResponse:
 )
 async def analyze_repository(
     request: RepositoryAnalyzeRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
     repository: GitHubRepository = Depends(get_github_repository),
+    sync_service: SynchronizationService = Depends(get_sync_service),
 ) -> RepositoryResponse:
     owner, repo = _parse_repo_url(request.repo_url)
-    data = await repository.get_repo(owner, repo)
+    data = await _get_or_analyze_repo(
+        owner, repo, db, repository, sync_service, background_tasks
+    )
     return _build_repo_response(data)
 
 
@@ -272,9 +330,14 @@ async def analyze_repository(
 async def repository_details(
     owner: str,
     repo: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
     repository: GitHubRepository = Depends(get_github_repository),
+    sync_service: SynchronizationService = Depends(get_sync_service),
 ) -> RepositoryResponse:
-    data = await repository.get_repo(owner, repo)
+    data = await _get_or_analyze_repo(
+        owner, repo, db, repository, sync_service, background_tasks
+    )
     return _build_repo_response(data)
 
 
@@ -428,3 +491,89 @@ async def list_issues(
         per_page=per_page,
         total_pages=total_pages,
     )
+
+
+# Synchronization & Analytics Endpoints
+
+@router.post(
+    "/repositories/{id}/refresh",
+    response_model=RepositoryRefreshResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger a manual repository refresh",
+    description="Forces a refresh of repository metadata, contributors, commits, issues, PRs, and languages in the background.",
+)
+async def refresh_repository(
+    id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    sync_service: SynchronizationService = Depends(get_sync_service),
+) -> RepositoryRefreshResponse:
+    stmt = select(Repository).where(Repository.id == id)
+    repo = (await db.execute(stmt)).scalars().first()
+    if not repo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found",
+        )
+
+    # Change status to SYNCING and save immediately
+    repo.sync_status = "SYNCING"
+    await db.commit()
+
+    # Trigger background task
+    background_tasks.add_task(sync_service.sync_repository_task, repo.id)
+
+    return RepositoryRefreshResponse(
+        repository_id=repo.id,
+        status="SYNCING",
+        message="Background synchronization successfully triggered.",
+    )
+
+
+@router.get(
+    "/repositories/{id}/sync-status",
+    response_model=SyncStatusResponse,
+    summary="Get repository synchronization status",
+    description="Check the background synchronization status of a repository.",
+)
+async def get_sync_status(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> SyncStatusResponse:
+    stmt = select(Repository).where(Repository.id == id)
+    repo = (await db.execute(stmt)).scalars().first()
+    if not repo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found",
+        )
+
+    return SyncStatusResponse(
+        repository_id=repo.id,
+        status=repo.sync_status,
+        last_synced_at=repo.last_synced_at,
+        error=repo.sync_error,
+    )
+
+
+@router.get(
+    "/repositories/{id}/metrics/history",
+    response_model=list[RepositorySnapshotResponse],
+    summary="Get historical metrics snapshots",
+    description="Fetch a chronological series of historical metrics snapshots for the repository.",
+)
+async def get_metrics_history(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    analytics_service: AnalyticsService = Depends(get_analytics_service),
+) -> list[RepositorySnapshotResponse]:
+    stmt = select(Repository).where(Repository.id == id)
+    repo = (await db.execute(stmt)).scalars().first()
+    if not repo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found",
+        )
+
+    snapshots = await analytics_service.get_metrics_history(repo.id)
+    return [RepositorySnapshotResponse.model_validate(snap) for snap in snapshots]
