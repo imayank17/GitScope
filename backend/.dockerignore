@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local virtual environment
+venv/
+.venv/
+env/
+.env
+
+# Testing / coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Git metadata
+.git/
+.gitignore
+
+# Docker build configurations
+Dockerfile
+.dockerignore
