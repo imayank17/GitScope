@@ -19,6 +19,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status, Background
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
+
+logger = get_logger("app.routers.github")
+
 from app.core.config import settings
 from app.database.session import get_db
 from app.core.dependencies import (
@@ -278,6 +282,7 @@ async def _get_or_analyze_repo(
 
     if not db_repo:
         # Does not exist, run full synchronous fetch and insert
+        logger.info(f"Repository {owner}/{repo} not found in database. Initiating synchronous repository analysis.")
         db_repo = await repository.get_repo(owner, repo)
         return db_repo
 
@@ -292,9 +297,14 @@ async def _get_or_analyze_repo(
     if not is_fresh:
         # Stale: trigger background revalidation
         if db_repo.sync_status != "SYNCING":
+            logger.info(f"Repository {owner}/{repo} cache is stale. Triggering background revalidation task.")
             db_repo.sync_status = "SYNCING"
             await db.commit()
             background_tasks.add_task(sync_service.sync_repository_task, db_repo.id)
+        else:
+            logger.info(f"Repository {owner}/{repo} cache is stale, but background sync is already in progress.")
+    else:
+        logger.info(f"Repository {owner}/{repo} cache is fresh.")
 
     return db_repo
 

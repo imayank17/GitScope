@@ -1,4 +1,3 @@
-import logging
 import uuid
 from datetime import datetime
 from typing import Dict, List, Set
@@ -15,8 +14,9 @@ from app.models.pull_request import PullRequest
 from app.models.repository import Repository
 from app.models.snapshot import RepositorySnapshot
 from app.services.github_service import GitHubService
+from app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("app.services.sync_service")
 
 
 class SynchronizationService:
@@ -36,6 +36,8 @@ class SynchronizationService:
         """
         owner = repository.owner_login
         repo_name = repository.name
+        
+        logger.info(f"Sync started for repository: {repository.full_name}")
 
         # 1. Fetch latest metadata and sub-resources from GitHub API (up to 100 items for sync batch)
         repo_data = await self.github.get_repository(owner, repo_name)
@@ -242,11 +244,13 @@ class SynchronizationService:
             pull_request_count=pull_count,
         )
         db.add(snapshot)
+        logger.info(f"Historical snapshot created for {repository.full_name} on date {snapshot.date}")
 
         # 9. Mark status as completed
         repository.sync_status = "COMPLETED"
         repository.last_synced_at = datetime.utcnow()
         repository.sync_error = None
+        logger.info(f"Sync completed successfully for repository: {repository.full_name}")
 
     async def sync_repository_task(self, repository_id: uuid.UUID) -> None:
         """

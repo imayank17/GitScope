@@ -3,18 +3,19 @@ GitHub API Service
 """
 
 import re
-
 import httpx
 from fastapi import HTTPException, status
 
 from app.core.config import settings
+from app.core.logging import get_logger
+
+logger = get_logger("app.services.github_service")
 
 
 class GitHubService:
     """Async wrapper around the GitHub REST API."""
 
     def __init__(self, client: httpx.AsyncClient) -> None:
-        
         self.client = client
         self.base_url = settings.GITHUB_API_BASE_URL
 
@@ -25,12 +26,24 @@ class GitHubService:
         if settings.GITHUB_TOKEN:
             self.headers["Authorization"] = f"Bearer {settings.GITHUB_TOKEN}"
 
-
     # Private helpers
 
+    def _check_rate_limit(self, response: httpx.Response) -> None:
+        remaining = response.headers.get("X-RateLimit-Remaining")
+        limit = response.headers.get("X-RateLimit-Limit")
+        if remaining is not None and limit is not None:
+            try:
+                rem_val = int(remaining)
+                if rem_val < 10:
+                    logger.warning(
+                        f"Rate limit warning: low remaining requests. "
+                        f"Remaining: {rem_val}/{limit}. "
+                        f"Reset timestamp: {response.headers.get('X-RateLimit-Reset')}"
+                    )
+            except ValueError:
+                pass
 
     def _handle_error(self, exc: httpx.HTTPStatusError, context: str) -> None:
-       
         status_code = exc.response.status_code
 
         if status_code == 404:
@@ -97,11 +110,14 @@ class GitHubService:
         if extra_params:
             params.update(extra_params)
 
+        logger.info(f"Request started: GET {url} | Params: {params}")
         try:
             response = await self.client.get(
                 url, headers=self.headers, params=params,
             )
+            self._check_rate_limit(response)
             response.raise_for_status()
+            logger.info(f"Request successful: GET {url} | Status: {response.status_code}")
 
             items = response.json()
             total_pages = self._parse_total_pages(
@@ -111,30 +127,36 @@ class GitHubService:
             return items, total_pages
 
         except httpx.HTTPStatusError as exc:
+            logger.error(f"Request failed: GET {url} | Status: {exc.response.status_code} | Reason: {str(exc)}")
             self._handle_error(exc, context)
 
         except httpx.RequestError as exc:
+            logger.exception(f"Request connection error: GET {url} | Details: {str(exc)}")
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Could not connect to GitHub API: {str(exc)}",
             )
 
-  
     # Public API methods
 
     async def get_repository(self, owner: str, repo: str) -> dict:
         """Fetch repository metadata."""
         url = f"{self.base_url}/repos/{owner}/{repo}"
+        logger.info(f"Request started: GET {url}")
 
         try:
             response = await self.client.get(url, headers=self.headers)
+            self._check_rate_limit(response)
             response.raise_for_status()
+            logger.info(f"Request successful: GET {url} | Status: {response.status_code}")
             return response.json()
 
         except httpx.HTTPStatusError as exc:
+            logger.error(f"Request failed: GET {url} | Status: {exc.response.status_code} | Reason: {str(exc)}")
             self._handle_error(exc, f"Repository '{owner}/{repo}'")
 
         except httpx.RequestError as exc:
+            logger.exception(f"Request connection error: GET {url} | Details: {str(exc)}")
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Could not connect to GitHub API: {str(exc)}",
@@ -179,16 +201,21 @@ class GitHubService:
             dict: e.g. {"Python": 150234, "JavaScript": 48012, "Shell": 3201}
         """
         url = f"{self.base_url}/repos/{owner}/{repo}/languages"
+        logger.info(f"Request started: GET {url}")
 
         try:
             response = await self.client.get(url, headers=self.headers)
+            self._check_rate_limit(response)
             response.raise_for_status()
+            logger.info(f"Request successful: GET {url} | Status: {response.status_code}")
             return response.json()
 
         except httpx.HTTPStatusError as exc:
+            logger.error(f"Request failed: GET {url} | Status: {exc.response.status_code} | Reason: {str(exc)}")
             self._handle_error(exc, f"Languages for '{owner}/{repo}'")
 
         except httpx.RequestError as exc:
+            logger.exception(f"Request connection error: GET {url} | Details: {str(exc)}")
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Could not connect to GitHub API: {str(exc)}",

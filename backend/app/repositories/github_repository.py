@@ -13,6 +13,9 @@ from app.models.pull_request import PullRequest
 from app.models.repository import Repository
 from app.models.snapshot import RepositorySnapshot
 from app.services.github_service import GitHubService
+from app.core.logging import get_logger
+
+logger = get_logger("app.repositories.github_repository")
 
 
 class GitHubRepository:
@@ -44,8 +47,10 @@ class GitHubRepository:
         """
         db_repo = await self._get_db_repo_by_name(owner, repo)
         if db_repo:
+            logger.info(f"Repository found in database cache: {owner}/{repo}")
             return db_repo
 
+        logger.info(f"Repository not found in database cache: {owner}/{repo}. Initiating initial sync from GitHub API.")
         # Repository does not exist in DB: fetch all components from GitHub API
         # We fetch up to 100 items per list for initial sync batch
         repo_data = await self.github.get_repository(owner, repo)
@@ -188,10 +193,15 @@ class GitHubRepository:
             )
         ]
 
-        self.db.add(new_repo)
-        await self.db.commit()
-        await self.db.refresh(new_repo)
-        return new_repo
+        try:
+            self.db.add(new_repo)
+            await self.db.commit()
+            await self.db.refresh(new_repo)
+            logger.info(f"Repository successfully synchronized and created in database: {new_repo.full_name}")
+            return new_repo
+        except Exception as e:
+            logger.exception(f"Failed to save synchronized repository {owner}/{repo} to database")
+            raise
 
     # Contributors 
 

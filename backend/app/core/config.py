@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     GITHUB_API_BASE_URL: str = "https://api.github.com"
     SYNC_TTL_SECONDS: int = 3600
 
+    # Logging
+    LOG_LEVEL: str = "INFO"
+    LOG_TO_FILE: bool = True
+    LOG_DIRECTORY: str = "logs"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,
