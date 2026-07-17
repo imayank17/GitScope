@@ -11,18 +11,11 @@ export default function SyncPage() {
   const { owner, repo } = useParams<{ owner: string; repo: string }>();
   const repoQuery = useRepository(owner!, repo!);
   const repoId = repoQuery.data?.id ?? null;
-  const [polling, setPolling] = useState(false);
-  const syncQuery = useSyncStatus(repoId, polling);
   const refreshMutation = useRefreshRepository();
-
-  // Stop polling once sync completes
-  if (polling && syncQuery.data && syncQuery.data.status !== 'SYNCING') {
-    setPolling(false);
-  }
+  const syncQuery = useSyncStatus(repoId, refreshMutation.isPending);
 
   const handleRefresh = () => {
     if (!repoId) return;
-    setPolling(true);
     refreshMutation.mutate(repoId);
   };
 
@@ -38,7 +31,7 @@ export default function SyncPage() {
         <SyncStatusCard
           syncStatus={syncQuery.data}
           onRefresh={handleRefresh}
-          isRefreshing={refreshMutation.isPending || polling}
+          isRefreshing={refreshMutation.isPending || syncQuery.data?.status === 'SYNCING'}
         />
       )}
 

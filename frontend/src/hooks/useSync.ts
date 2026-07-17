@@ -6,7 +6,10 @@ export const useSyncStatus = (id: string | null, polling = false) => {
     queryKey: ['syncStatus', id],
     queryFn: () => getSyncStatus(id!),
     enabled: !!id,
-    refetchInterval: polling ? 3000 : false,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return polling || status === 'SYNCING' ? 3000 : false;
+    },
   });
 };
 

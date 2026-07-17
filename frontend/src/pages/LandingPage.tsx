@@ -93,8 +93,7 @@ export default function LandingPage() {
           </div>
           {error && <p className="text-xs text-red-400 mt-3 text-left">{error}</p>}
           <p className="text-xs text-surface-500 mt-3">
-            Try: <button onClick={() => setInput('facebook/react')} className="text-primary-400 hover:underline cursor-pointer">facebook/react</button>
-            {' · '}
+            Try: 
             <button onClick={() => setInput('vercel/next.js')} className="text-primary-400 hover:underline cursor-pointer">vercel/next.js</button>
             {' · '}
             <button onClick={() => setInput('microsoft/vscode')} className="text-primary-400 hover:underline cursor-pointer">microsoft/vscode</button>
