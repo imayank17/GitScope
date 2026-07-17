@@ -79,6 +79,8 @@ jobs:
       - name: Start Backend Server
         working-directory: backend
         env:
+          APP_NAME: GitScope
+          APP_VERSION: 1.0.0
           DATABASE_URL: postgresql+asyncpg://mayank:postgres@localhost:5432/gitscope_db
           SECRET_KEY: test_secret_key_for_ci_cd_verification
           ALGORITHM: HS256
