@@ -1,4 +1,8 @@
-# How to Run the Project
+# GitScope
+
+[![GitScope CI/CD Pipeline](https://github.com/imayank17/GitScope/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/imayank17/GitScope/actions/workflows/ci-cd.yml)
+
+## How to Run the Project
 
 Follow the steps below to set up and run the project locally.
 
