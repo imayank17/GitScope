@@ -2,7 +2,16 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -69,4 +78,6 @@ class Issue(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<Issue #{self.number} ({self.state}) in Repository {self.repository_id}>"
+        return (
+            f"<Issue #{self.number} ({self.state}) in Repository {self.repository_id}>"
+        )

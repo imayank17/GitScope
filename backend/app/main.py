@@ -9,6 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 # Initialize centralized logging immediately on import
 from app.core.logging import setup_logging, get_logger
+
 setup_logging()
 
 logger = get_logger("app.main")
@@ -21,10 +22,10 @@ from app.routers import github
 async def lifespan(app: FastAPI):
     # --- Startup ---
     logger.info("Application startup sequence initiated.")
-    
+
     app.state.http_client = httpx.AsyncClient(
-        timeout=httpx.Timeout(30.0),     # 30s total timeout
-        follow_redirects=True,            # Follow GitHub redirects
+        timeout=httpx.Timeout(30.0),  # 30s total timeout
+        follow_redirects=True,  # Follow GitHub redirects
     )
 
     # Automatically create tables in PostgreSQL on startup
@@ -40,18 +41,26 @@ async def lifespan(app: FastAPI):
 
             # Safely expand repositories schema with new columns if they do not exist
             await conn.execute(
-                sa.text("ALTER TABLE repositories ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP WITH TIME ZONE;")
+                sa.text(
+                    "ALTER TABLE repositories ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP WITH TIME ZONE;"
+                )
             )
             await conn.execute(
-                sa.text("ALTER TABLE repositories ADD COLUMN IF NOT EXISTS sync_status VARCHAR(50) DEFAULT 'PENDING' NOT NULL;")
+                sa.text(
+                    "ALTER TABLE repositories ADD COLUMN IF NOT EXISTS sync_status VARCHAR(50) DEFAULT 'PENDING' NOT NULL;"
+                )
             )
             await conn.execute(
-                sa.text("ALTER TABLE repositories ADD COLUMN IF NOT EXISTS sync_error TEXT;")
+                sa.text(
+                    "ALTER TABLE repositories ADD COLUMN IF NOT EXISTS sync_error TEXT;"
+                )
             )
-        
+
         logger.info("Database connected successfully and schema migrations validated.")
     except Exception as e:
-        logger.exception("Database connection and schema migration failed during startup lifespan.")
+        logger.exception(
+            "Database connection and schema migration failed during startup lifespan."
+        )
         raise
 
     logger.info("Application startup complete. Ready to handle requests.")
@@ -75,14 +84,14 @@ app = FastAPI(
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.perf_counter()
-        
+
         # Log incoming request (path and method)
         logger.info(f"Incoming Request: {request.method} {request.url.path}")
-        
+
         try:
             response = await call_next(request)
             process_time = (time.perf_counter() - start_time) * 1000
-            
+
             logger.info(
                 f"Response: {request.method} {request.url.path} | "
                 f"Status: {response.status_code} | "
@@ -119,12 +128,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         f"Detail: {exc.errors()}"
     )
     from fastapi.exception_handlers import request_validation_exception_handler
+
     return await request_validation_exception_handler(request, exc)
 
 
-#Register Routers-------
+# Register Routers-------
 
 app.include_router(github.router)
+
 
 @app.get("/")
 def root():

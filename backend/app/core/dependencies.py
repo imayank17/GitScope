@@ -13,7 +13,7 @@ from app.services.analytics_service import AnalyticsService
 
 
 def get_github_service(request: Request) -> GitHubService:
-  
+
     return GitHubService(client=request.app.state.http_client)
 
 
@@ -21,7 +21,7 @@ def get_github_repository(
     db: AsyncSession = Depends(get_db),
     service: GitHubService = Depends(get_github_service),
 ) -> GitHubRepository:
-   
+
     return GitHubRepository(db=db, github_service=service)
 
 

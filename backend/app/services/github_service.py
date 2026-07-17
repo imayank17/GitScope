@@ -60,7 +60,7 @@ class GitHubService:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="GitHub API rate limit exceeded or access denied. "
-                       "Add a GITHUB_TOKEN to .env for higher limits.",
+                "Add a GITHUB_TOKEN to .env for higher limits.",
             )
         else:
             raise HTTPException(
@@ -113,25 +113,31 @@ class GitHubService:
         logger.info(f"Request started: GET {url} | Params: {params}")
         try:
             response = await self.client.get(
-                url, headers=self.headers, params=params,
+                url,
+                headers=self.headers,
+                params=params,
             )
             self._check_rate_limit(response)
             response.raise_for_status()
-            logger.info(f"Request successful: GET {url} | Status: {response.status_code}")
+            logger.info(
+                f"Request successful: GET {url} | Status: {response.status_code}"
+            )
 
             items = response.json()
-            total_pages = self._parse_total_pages(
-                response.headers.get("Link")
-            )
+            total_pages = self._parse_total_pages(response.headers.get("Link"))
 
             return items, total_pages
 
         except httpx.HTTPStatusError as exc:
-            logger.error(f"Request failed: GET {url} | Status: {exc.response.status_code} | Reason: {str(exc)}")
+            logger.error(
+                f"Request failed: GET {url} | Status: {exc.response.status_code} | Reason: {str(exc)}"
+            )
             self._handle_error(exc, context)
 
         except httpx.RequestError as exc:
-            logger.exception(f"Request connection error: GET {url} | Details: {str(exc)}")
+            logger.exception(
+                f"Request connection error: GET {url} | Details: {str(exc)}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Could not connect to GitHub API: {str(exc)}",
@@ -148,22 +154,32 @@ class GitHubService:
             response = await self.client.get(url, headers=self.headers)
             self._check_rate_limit(response)
             response.raise_for_status()
-            logger.info(f"Request successful: GET {url} | Status: {response.status_code}")
+            logger.info(
+                f"Request successful: GET {url} | Status: {response.status_code}"
+            )
             return response.json()
 
         except httpx.HTTPStatusError as exc:
-            logger.error(f"Request failed: GET {url} | Status: {exc.response.status_code} | Reason: {str(exc)}")
+            logger.error(
+                f"Request failed: GET {url} | Status: {exc.response.status_code} | Reason: {str(exc)}"
+            )
             self._handle_error(exc, f"Repository '{owner}/{repo}'")
 
         except httpx.RequestError as exc:
-            logger.exception(f"Request connection error: GET {url} | Details: {str(exc)}")
+            logger.exception(
+                f"Request connection error: GET {url} | Details: {str(exc)}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Could not connect to GitHub API: {str(exc)}",
             )
 
     async def get_contributors(
-        self, owner: str, repo: str, page: int = 1, per_page: int = 30,
+        self,
+        owner: str,
+        repo: str,
+        page: int = 1,
+        per_page: int = 30,
     ) -> tuple[list[dict], int]:
         """
         Fetch repository contributors (sorted by number of contributions).
@@ -173,11 +189,18 @@ class GitHubService:
         """
         url = f"{self.base_url}/repos/{owner}/{repo}/contributors"
         return await self._get_paginated(
-            url, page, per_page, f"Contributors for '{owner}/{repo}'",
+            url,
+            page,
+            per_page,
+            f"Contributors for '{owner}/{repo}'",
         )
 
     async def get_commits(
-        self, owner: str, repo: str, page: int = 1, per_page: int = 30,
+        self,
+        owner: str,
+        repo: str,
+        page: int = 1,
+        per_page: int = 30,
     ) -> tuple[list[dict], int]:
         """
         Fetch repository commits (most recent first).
@@ -187,7 +210,10 @@ class GitHubService:
         """
         url = f"{self.base_url}/repos/{owner}/{repo}/commits"
         return await self._get_paginated(
-            url, page, per_page, f"Commits for '{owner}/{repo}'",
+            url,
+            page,
+            per_page,
+            f"Commits for '{owner}/{repo}'",
         )
 
     async def get_languages(self, owner: str, repo: str) -> dict:
@@ -207,15 +233,21 @@ class GitHubService:
             response = await self.client.get(url, headers=self.headers)
             self._check_rate_limit(response)
             response.raise_for_status()
-            logger.info(f"Request successful: GET {url} | Status: {response.status_code}")
+            logger.info(
+                f"Request successful: GET {url} | Status: {response.status_code}"
+            )
             return response.json()
 
         except httpx.HTTPStatusError as exc:
-            logger.error(f"Request failed: GET {url} | Status: {exc.response.status_code} | Reason: {str(exc)}")
+            logger.error(
+                f"Request failed: GET {url} | Status: {exc.response.status_code} | Reason: {str(exc)}"
+            )
             self._handle_error(exc, f"Languages for '{owner}/{repo}'")
 
         except httpx.RequestError as exc:
-            logger.exception(f"Request connection error: GET {url} | Details: {str(exc)}")
+            logger.exception(
+                f"Request connection error: GET {url} | Details: {str(exc)}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Could not connect to GitHub API: {str(exc)}",
@@ -240,7 +272,9 @@ class GitHubService:
         """
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls"
         return await self._get_paginated(
-            url, page, per_page,
+            url,
+            page,
+            per_page,
             f"Pull requests for '{owner}/{repo}'",
             extra_params={"state": state},
         )
@@ -273,14 +307,14 @@ class GitHubService:
         """
         url = f"{self.base_url}/repos/{owner}/{repo}/issues"
         items, total_pages = await self._get_paginated(
-            url, page, per_page,
+            url,
+            page,
+            per_page,
             f"Issues for '{owner}/{repo}'",
             extra_params={"state": state},
         )
 
         # Filter out pull requests — they have a "pull_request" key
-        issues_only = [
-            item for item in items if "pull_request" not in item
-        ]
+        issues_only = [item for item in items if "pull_request" not in item]
 
         return issues_only, total_pages

@@ -6,21 +6,24 @@ from app.core.config import settings
 
 # ANSI color codes for elegant console formatting
 COLOR_CODES = {
-    "DEBUG": "\033[36m",      # Cyan
-    "INFO": "\033[32m",       # Green
-    "WARNING": "\033[33m",    # Yellow
-    "ERROR": "\033[31m",      # Red
-    "CRITICAL": "\033[41m\033[37m", # Red background, white text
+    "DEBUG": "\033[36m",  # Cyan
+    "INFO": "\033[32m",  # Green
+    "WARNING": "\033[33m",  # Yellow
+    "ERROR": "\033[31m",  # Red
+    "CRITICAL": "\033[41m\033[37m",  # Red background, white text
 }
 RESET_CODE = "\033[0m"
 
+
 class UTCFormatter(logging.Formatter):
     """Formatter to force UTC timezone for timestamps."""
+
     converter = time.gmtime
 
 
 class ColoredFormatter(UTCFormatter):
     """Console formatter that dynamically injects ANSI colors to the log level name."""
+
     def format(self, record):
         # Cache original level name to restore it for other non-colored handlers
         orig_levelname = record.levelname
@@ -72,27 +75,33 @@ def setup_logging() -> None:
 
         # Main app.log file handler
         app_file = os.path.join(log_dir, "app.log")
-        app_handler = RotatingFileHandler(app_file, maxBytes=10*1024*1024, backupCount=5)
+        app_handler = RotatingFileHandler(
+            app_file, maxBytes=10 * 1024 * 1024, backupCount=5
+        )
         app_handler.setFormatter(file_formatter)
         app_handler.setLevel(log_level)
         root_logger.addHandler(app_handler)
 
         # Global error.log file handler (receives ERROR and CRITICAL levels from all loggers)
         error_file = os.path.join(log_dir, "error.log")
-        error_handler = RotatingFileHandler(error_file, maxBytes=10*1024*1024, backupCount=5)
+        error_handler = RotatingFileHandler(
+            error_file, maxBytes=10 * 1024 * 1024, backupCount=5
+        )
         error_handler.setFormatter(file_formatter)
         error_handler.setLevel(logging.ERROR)
         root_logger.addHandler(error_handler)
 
         # 4. Route specific handlers for domain logs
-        
+
         # GitHub Integration Logs (github.log)
         github_logger = logging.getLogger("app.services.github_service")
         github_logger.setLevel(log_level)
         github_logger.propagate = True  # Ensure it also outputs to console and app.log
-        
+
         github_file = os.path.join(log_dir, "github.log")
-        github_handler = RotatingFileHandler(github_file, maxBytes=10*1024*1024, backupCount=5)
+        github_handler = RotatingFileHandler(
+            github_file, maxBytes=10 * 1024 * 1024, backupCount=5
+        )
         github_handler.setFormatter(file_formatter)
         github_handler.setLevel(log_level)
         github_logger.addHandler(github_handler)
@@ -101,16 +110,18 @@ def setup_logging() -> None:
         sync_logger = logging.getLogger("app.services.sync_service")
         sync_logger.setLevel(log_level)
         sync_logger.propagate = True
-        
+
         # GitRepository db logs are also sync-related, so they go to sync.log
         repo_logger = logging.getLogger("app.repositories.github_repository")
         repo_logger.setLevel(log_level)
         repo_logger.propagate = True
 
         sync_file = os.path.join(log_dir, "sync.log")
-        sync_handler = RotatingFileHandler(sync_file, maxBytes=10*1024*1024, backupCount=5)
+        sync_handler = RotatingFileHandler(
+            sync_file, maxBytes=10 * 1024 * 1024, backupCount=5
+        )
         sync_handler.setFormatter(file_formatter)
         sync_handler.setLevel(log_level)
-        
+
         sync_logger.addHandler(sync_handler)
         repo_logger.addHandler(sync_handler)

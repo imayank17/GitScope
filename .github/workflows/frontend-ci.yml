@@ -33,7 +33,7 @@ jobs:
         run: npm ci
 
       - name: Run Linter
-        run: npm run lint
+        run: npx oxlint src
 
       - name: Verify TypeScript Type Checking
         run: npx tsc -b

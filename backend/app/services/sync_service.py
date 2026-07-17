@@ -36,40 +36,58 @@ class SynchronizationService:
         """
         owner = repository.owner_login
         repo_name = repository.name
-        
+
         logger.info(f"Sync started for repository: {repository.full_name}")
 
         # 1. Fetch latest metadata and sub-resources from GitHub API (up to 100 items for sync batch)
         repo_data = await self.github.get_repository(owner, repo_name)
-        
+
         try:
-            contributors_data, _ = await self.github.get_contributors(owner, repo_name, page=1, per_page=100)
+            contributors_data, _ = await self.github.get_contributors(
+                owner, repo_name, page=1, per_page=100
+            )
         except Exception as e:
-            logger.warning(f"Failed to fetch contributors during sync for {repository.full_name}: {e}")
+            logger.warning(
+                f"Failed to fetch contributors during sync for {repository.full_name}: {e}"
+            )
             contributors_data = []
 
         try:
-            commits_data, _ = await self.github.get_commits(owner, repo_name, page=1, per_page=100)
+            commits_data, _ = await self.github.get_commits(
+                owner, repo_name, page=1, per_page=100
+            )
         except Exception as e:
-            logger.warning(f"Failed to fetch commits during sync for {repository.full_name}: {e}")
+            logger.warning(
+                f"Failed to fetch commits during sync for {repository.full_name}: {e}"
+            )
             commits_data = []
 
         try:
             languages_data = await self.github.get_languages(owner, repo_name)
         except Exception as e:
-            logger.warning(f"Failed to fetch languages during sync for {repository.full_name}: {e}")
+            logger.warning(
+                f"Failed to fetch languages during sync for {repository.full_name}: {e}"
+            )
             languages_data = {}
 
         try:
-            pulls_data, _ = await self.github.get_pull_requests(owner, repo_name, state="all", page=1, per_page=100)
+            pulls_data, _ = await self.github.get_pull_requests(
+                owner, repo_name, state="all", page=1, per_page=100
+            )
         except Exception as e:
-            logger.warning(f"Failed to fetch pull requests during sync for {repository.full_name}: {e}")
+            logger.warning(
+                f"Failed to fetch pull requests during sync for {repository.full_name}: {e}"
+            )
             pulls_data = []
 
         try:
-            issues_data, _ = await self.github.get_issues(owner, repo_name, state="all", page=1, per_page=100)
+            issues_data, _ = await self.github.get_issues(
+                owner, repo_name, state="all", page=1, per_page=100
+            )
         except Exception as e:
-            logger.warning(f"Failed to fetch issues during sync for {repository.full_name}: {e}")
+            logger.warning(
+                f"Failed to fetch issues during sync for {repository.full_name}: {e}"
+            )
             issues_data = []
 
         # 2. Update Repository fields
@@ -91,7 +109,9 @@ class SynchronizationService:
         repository.github_updated_at = repo_data["updated_at"]
 
         # 3. Upsert Contributors (in-place updates to avoid duplicates or key violations)
-        existing_contributors_stmt = select(Contributor).where(Contributor.repository_id == repository.id)
+        existing_contributors_stmt = select(Contributor).where(
+            Contributor.repository_id == repository.id
+        )
         existing_contributors_res = await db.execute(existing_contributors_stmt)
         existing_contribs_map: Dict[int, Contributor] = {
             c.github_id: c for c in existing_contributors_res.scalars().all()
@@ -175,7 +195,9 @@ class SynchronizationService:
                 db.add(new_issue)
 
         # 6. Upsert Pull Requests (in-place updates on number)
-        existing_prs_stmt = select(PullRequest).where(PullRequest.repository_id == repository.id)
+        existing_prs_stmt = select(PullRequest).where(
+            PullRequest.repository_id == repository.id
+        )
         existing_prs_res = await db.execute(existing_prs_stmt)
         existing_prs_map: Dict[int, PullRequest] = {
             pr.number: pr for pr in existing_prs_res.scalars().all()
@@ -210,7 +232,9 @@ class SynchronizationService:
                 db.add(new_pr)
 
         # 7. Update Languages: delete existing language entries and rewrite
-        delete_langs_stmt = delete(Language).where(Language.repository_id == repository.id)
+        delete_langs_stmt = delete(Language).where(
+            Language.repository_id == repository.id
+        )
         await db.execute(delete_langs_stmt)
 
         total_bytes = sum(languages_data.values())
@@ -219,7 +243,11 @@ class SynchronizationService:
                 repository_id=repository.id,
                 name=lang_name,
                 bytes=bytes_count,
-                percentage=round((bytes_count / total_bytes) * 100, 2) if total_bytes > 0 else 0.0,
+                percentage=(
+                    round((bytes_count / total_bytes) * 100, 2)
+                    if total_bytes > 0
+                    else 0.0
+                ),
             )
             db.add(new_lang)
 
@@ -227,9 +255,13 @@ class SynchronizationService:
         await db.flush()
 
         # 8. Create historical snapshot record
-        commit_count_stmt = select(func.count(Commit.id)).where(Commit.repository_id == repository.id)
-        pull_count_stmt = select(func.count(PullRequest.id)).where(PullRequest.repository_id == repository.id)
-        
+        commit_count_stmt = select(func.count(Commit.id)).where(
+            Commit.repository_id == repository.id
+        )
+        pull_count_stmt = select(func.count(PullRequest.id)).where(
+            PullRequest.repository_id == repository.id
+        )
+
         commit_count = (await db.execute(commit_count_stmt)).scalar() or 0
         pull_count = (await db.execute(pull_count_stmt)).scalar() or 0
 
@@ -244,34 +276,46 @@ class SynchronizationService:
             pull_request_count=pull_count,
         )
         db.add(snapshot)
-        logger.info(f"Historical snapshot created for {repository.full_name} on date {snapshot.date}")
+        logger.info(
+            f"Historical snapshot created for {repository.full_name} on date {snapshot.date}"
+        )
 
         # 9. Mark status as completed
         repository.sync_status = "COMPLETED"
         repository.last_synced_at = datetime.utcnow()
         repository.sync_error = None
-        logger.info(f"Sync completed successfully for repository: {repository.full_name}")
+        logger.info(
+            f"Sync completed successfully for repository: {repository.full_name}"
+        )
 
     async def sync_repository_task(self, repository_id: uuid.UUID) -> None:
         """
         Background task executor running on a separate database session context.
         """
-        logger.info(f"Starting background synchronization for repository ID {repository_id}")
+        logger.info(
+            f"Starting background synchronization for repository ID {repository_id}"
+        )
         async with AsyncSessionLocal() as db:
             # Query the repository instance
             stmt = select(Repository).where(Repository.id == repository_id)
             repository = (await db.execute(stmt)).scalars().first()
 
             if not repository:
-                logger.error(f"Synchronization failed: Repository ID {repository_id} not found in database.")
+                logger.error(
+                    f"Synchronization failed: Repository ID {repository_id} not found in database."
+                )
                 return
 
             try:
                 await self.sync_repository(repository, db)
                 await db.commit()
-                logger.info(f"Background synchronization completed successfully for {repository.full_name}")
+                logger.info(
+                    f"Background synchronization completed successfully for {repository.full_name}"
+                )
             except Exception as e:
-                logger.exception(f"Error during background synchronization for {repository.full_name}: {e}")
+                logger.exception(
+                    f"Error during background synchronization for {repository.full_name}: {e}"
+                )
                 # Re-fetch repo inside error context if session is rolled back
                 try:
                     await db.rollback()
@@ -279,4 +323,6 @@ class SynchronizationService:
                     repository.sync_error = str(e)
                     await db.commit()
                 except Exception as db_err:
-                    logger.error(f"Failed to record sync error status to database: {db_err}")
+                    logger.error(
+                        f"Failed to record sync error status to database: {db_err}"
+                    )

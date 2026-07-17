@@ -26,6 +26,7 @@ jobs:
 
       - name: Validate Docker Compose Configuration
         run: |
+          touch backend/.env
           docker compose config
 
       - name: Build Backend Docker Image

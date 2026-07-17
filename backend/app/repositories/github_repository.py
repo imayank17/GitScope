@@ -30,14 +30,18 @@ class GitHubRepository:
         self.db = db
         self.github = github_service
 
-    async def _get_db_repo_by_name(self, owner: str, repo: str) -> Union[Repository, None]:
+    async def _get_db_repo_by_name(
+        self, owner: str, repo: str
+    ) -> Union[Repository, None]:
         """Helper to lookup a repository in the database by full_name (case-insensitive)."""
         full_name = f"{owner}/{repo}"
-        stmt = select(Repository).where(func.lower(Repository.full_name) == full_name.lower())
+        stmt = select(Repository).where(
+            func.lower(Repository.full_name) == full_name.lower()
+        )
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
-    # Repository details 
+    # Repository details
 
     async def get_repo(self, owner: str, repo: str) -> Union[Repository, dict]:
         """
@@ -50,19 +54,25 @@ class GitHubRepository:
             logger.info(f"Repository found in database cache: {owner}/{repo}")
             return db_repo
 
-        logger.info(f"Repository not found in database cache: {owner}/{repo}. Initiating initial sync from GitHub API.")
+        logger.info(
+            f"Repository not found in database cache: {owner}/{repo}. Initiating initial sync from GitHub API."
+        )
         # Repository does not exist in DB: fetch all components from GitHub API
         # We fetch up to 100 items per list for initial sync batch
         repo_data = await self.github.get_repository(owner, repo)
-        
+
         # Catch and ignore errors for optional sub-resources to guarantee robust analysis
         try:
-            contributors_data, _ = await self.github.get_contributors(owner, repo, page=1, per_page=100)
+            contributors_data, _ = await self.github.get_contributors(
+                owner, repo, page=1, per_page=100
+            )
         except Exception:
             contributors_data = []
 
         try:
-            commits_data, _ = await self.github.get_commits(owner, repo, page=1, per_page=100)
+            commits_data, _ = await self.github.get_commits(
+                owner, repo, page=1, per_page=100
+            )
         except Exception:
             commits_data = []
 
@@ -72,12 +82,16 @@ class GitHubRepository:
             languages_data = {}
 
         try:
-            pulls_data, _ = await self.github.get_pull_requests(owner, repo, state="all", page=1, per_page=100)
+            pulls_data, _ = await self.github.get_pull_requests(
+                owner, repo, state="all", page=1, per_page=100
+            )
         except Exception:
             pulls_data = []
 
         try:
-            issues_data, _ = await self.github.get_issues(owner, repo, state="all", page=1, per_page=100)
+            issues_data, _ = await self.github.get_issues(
+                owner, repo, state="all", page=1, per_page=100
+            )
         except Exception:
             issues_data = []
 
@@ -175,7 +189,11 @@ class GitHubRepository:
             Language(
                 name=lang,
                 bytes=bytes_count,
-                percentage=round((bytes_count / total_bytes) * 100, 2) if total_bytes > 0 else 0.0,
+                percentage=(
+                    round((bytes_count / total_bytes) * 100, 2)
+                    if total_bytes > 0
+                    else 0.0
+                ),
             )
             for lang, bytes_count in languages_data.items()
         ]
@@ -197,16 +215,24 @@ class GitHubRepository:
             self.db.add(new_repo)
             await self.db.commit()
             await self.db.refresh(new_repo)
-            logger.info(f"Repository successfully synchronized and created in database: {new_repo.full_name}")
+            logger.info(
+                f"Repository successfully synchronized and created in database: {new_repo.full_name}"
+            )
             return new_repo
         except Exception as e:
-            logger.exception(f"Failed to save synchronized repository {owner}/{repo} to database")
+            logger.exception(
+                f"Failed to save synchronized repository {owner}/{repo} to database"
+            )
             raise
 
-    # Contributors 
+    # Contributors
 
     async def get_contributors(
-        self, owner: str, repo: str, page: int = 1, per_page: int = 30,
+        self,
+        owner: str,
+        repo: str,
+        page: int = 1,
+        per_page: int = 30,
     ) -> Tuple[List[Union[Contributor, dict]], int]:
         """
         Fetch repository contributors. Queries database if the repo exists.
@@ -215,7 +241,9 @@ class GitHubRepository:
         db_repo = await self._get_db_repo_by_name(owner, repo)
         if db_repo:
             # Count contributors in database
-            count_stmt = select(func.count(Contributor.id)).where(Contributor.repository_id == db_repo.id)
+            count_stmt = select(func.count(Contributor.id)).where(
+                Contributor.repository_id == db_repo.id
+            )
             total_count = (await self.db.execute(count_stmt)).scalar() or 0
             total_pages = math.ceil(total_count / per_page) if total_count > 0 else 1
 
@@ -232,10 +260,14 @@ class GitHubRepository:
 
         return await self.github.get_contributors(owner, repo, page, per_page)
 
-    # Commits 
+    # Commits
 
     async def get_commits(
-        self, owner: str, repo: str, page: int = 1, per_page: int = 30,
+        self,
+        owner: str,
+        repo: str,
+        page: int = 1,
+        per_page: int = 30,
     ) -> Tuple[List[Union[Commit, dict]], int]:
         """
         Fetch repository commits. Queries database if the repo exists.
@@ -243,7 +275,9 @@ class GitHubRepository:
         """
         db_repo = await self._get_db_repo_by_name(owner, repo)
         if db_repo:
-            count_stmt = select(func.count(Commit.id)).where(Commit.repository_id == db_repo.id)
+            count_stmt = select(func.count(Commit.id)).where(
+                Commit.repository_id == db_repo.id
+            )
             total_count = (await self.db.execute(count_stmt)).scalar() or 0
             total_pages = math.ceil(total_count / per_page) if total_count > 0 else 1
 
@@ -259,7 +293,7 @@ class GitHubRepository:
 
         return await self.github.get_commits(owner, repo, page, per_page)
 
-    # Languages 
+    # Languages
 
     async def get_languages(self, owner: str, repo: str) -> Union[List[Language], dict]:
         """
@@ -268,13 +302,17 @@ class GitHubRepository:
         """
         db_repo = await self._get_db_repo_by_name(owner, repo)
         if db_repo:
-            select_stmt = select(Language).where(Language.repository_id == db_repo.id).order_by(Language.bytes.desc())
+            select_stmt = (
+                select(Language)
+                .where(Language.repository_id == db_repo.id)
+                .order_by(Language.bytes.desc())
+            )
             result = await self.db.execute(select_stmt)
             return result.scalars().all()
 
         return await self.github.get_languages(owner, repo)
 
-    # Pull Requests 
+    # Pull Requests
 
     async def get_pull_requests(
         self,
@@ -298,13 +336,17 @@ class GitHubRepository:
             total_count = (await self.db.execute(count_stmt)).scalar() or 0
             total_pages = math.ceil(total_count / per_page) if total_count > 0 else 1
 
-            select_stmt = query.order_by(PullRequest.number.desc()).offset((page - 1) * per_page).limit(per_page)
+            select_stmt = (
+                query.order_by(PullRequest.number.desc())
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+            )
             result = await self.db.execute(select_stmt)
             return result.scalars().all(), total_pages
 
         return await self.github.get_pull_requests(owner, repo, state, page, per_page)
 
-    # Issues 
+    # Issues
 
     async def get_issues(
         self,
@@ -328,7 +370,11 @@ class GitHubRepository:
             total_count = (await self.db.execute(count_stmt)).scalar() or 0
             total_pages = math.ceil(total_count / per_page) if total_count > 0 else 1
 
-            select_stmt = query.order_by(Issue.number.desc()).offset((page - 1) * per_page).limit(per_page)
+            select_stmt = (
+                query.order_by(Issue.number.desc())
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+            )
             result = await self.db.execute(select_stmt)
             return result.scalars().all(), total_pages
 

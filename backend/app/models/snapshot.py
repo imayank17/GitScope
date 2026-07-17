@@ -4,9 +4,10 @@ from sqlalchemy import DateTime, Date, ForeignKey, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base
 
+
 class RepositorySnapshot(Base):
     """SQLAlchemy model representing a daily historical metrics snapshot for a repository."""
-    
+
     __tablename__ = "repository_snapshots"
 
     # UUID Primary Key

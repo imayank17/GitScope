@@ -24,13 +24,13 @@ async def test_refresh_repository_success(client, respx_mock_github, db_reposito
     sets the repository status to SYNCING/COMPLETED, and returns 202 Accepted.
     """
     repo_id = db_repository.id
-    
+
     response = await client.post(f"/repositories/{repo_id}/refresh")
     assert response.status_code == 202
     json_data = response.json()
     assert json_data["repository_id"] == str(repo_id)
     assert json_data["status"] == "SYNCING"
-    
+
     # Verify DB state was updated (it may transition all the way to COMPLETED during background task execution)
     db.expire_all()
     stmt = select(Repository).where(Repository.id == repo_id)
@@ -85,7 +85,7 @@ async def test_get_metrics_history_success(client, db_repository):
     response = await client.get(f"/repositories/{repo_id}/metrics/history")
     assert response.status_code == 200
     json_data = response.json()
-    
+
     assert isinstance(json_data, list)
     assert len(json_data) == 1
     assert json_data[0]["stars"] == 100

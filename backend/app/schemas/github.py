@@ -16,8 +16,8 @@ import uuid
 import datetime
 from pydantic import BaseModel, Field
 
+# Existing schemas (unchanged)
 
-#Existing schemas (unchanged)
 
 class RepositoryAnalyzeRequest(BaseModel):
     """
@@ -64,9 +64,8 @@ class RepositoryResponse(BaseModel):
     owner_avatar_url: str
 
 
-
-
 # Generic pagination wrapper
+
 
 class PaginatedResponse(BaseModel):
     """
@@ -76,6 +75,7 @@ class PaginatedResponse(BaseModel):
     always know: items are in "items", pagination info is in the
     top-level fields.
     """
+
     items: list = Field(
         ...,
         description="List of results for this page.",
@@ -96,12 +96,14 @@ class PaginatedResponse(BaseModel):
 
 # Contributors
 
+
 class ContributorResponse(BaseModel):
     """
     A repository contributor.
 
     Maps from GitHub's /repos/{owner}/{repo}/contributors response.
     """
+
     login: str = Field(..., description="GitHub username.")
     avatar_url: str = Field(..., description="Avatar image URL.")
     contributions: int = Field(..., description="Number of commits by this user.")
@@ -109,6 +111,7 @@ class ContributorResponse(BaseModel):
 
 
 # Commits
+
 
 class CommitResponse(BaseModel):
     """
@@ -123,16 +126,20 @@ class CommitResponse(BaseModel):
       data["commit"]["committer"]["name"]  → committer_name
       data["html_url"]                     → html_url
     """
+
     sha: str = Field(..., description="Full commit SHA hash.")
     message: str = Field(..., description="Commit message.")
     author_name: str = Field(..., description="Author's display name.")
     author_email: str = Field(..., description="Author's email address.")
-    author_date: str = Field(..., description="When the commit was authored (ISO 8601).")
+    author_date: str = Field(
+        ..., description="When the commit was authored (ISO 8601)."
+    )
     committer_name: str = Field(..., description="Committer's display name.")
     html_url: str = Field(..., description="URL to view this commit on GitHub.")
 
 
 # Languages
+
 
 class LanguageResponse(BaseModel):
     """
@@ -141,6 +148,7 @@ class LanguageResponse(BaseModel):
     GitHub returns raw bytes: {"Python": 150234, "JavaScript": 48012}
     We add total_bytes and percentages so this is chart-ready.
     """
+
     languages: dict[str, int] = Field(
         ...,
         description="Map of language name → bytes of code.",
@@ -157,12 +165,14 @@ class LanguageResponse(BaseModel):
 
 # Pull Requests
 
+
 class PullRequestResponse(BaseModel):
     """
     A pull request.
 
     Maps from GitHub's /repos/{owner}/{repo}/pulls response.
     """
+
     number: int = Field(..., description="PR number.")
     title: str = Field(..., description="PR title.")
     state: str = Field(..., description="State: 'open' or 'closed'.")
@@ -186,6 +196,7 @@ class PullRequestResponse(BaseModel):
 
 # Issues
 
+
 class IssueResponse(BaseModel):
     """
     An issue (not a pull request).
@@ -193,12 +204,15 @@ class IssueResponse(BaseModel):
     GitHub's Issues API returns both issues and PRs.
     The service layer filters out PRs before this schema is used.
     """
+
     number: int = Field(..., description="Issue number.")
     title: str = Field(..., description="Issue title.")
     state: str = Field(..., description="State: 'open' or 'closed'.")
     user_login: str = Field(..., description="Username of the issue author.")
     created_at: str = Field(..., description="When the issue was created (ISO 8601).")
-    updated_at: str = Field(..., description="When the issue was last updated (ISO 8601).")
+    updated_at: str = Field(
+        ..., description="When the issue was last updated (ISO 8601)."
+    )
     html_url: str = Field(..., description="URL to view this issue on GitHub.")
     labels: list[str] = Field(
         default=[],
@@ -214,6 +228,7 @@ class IssueResponse(BaseModel):
 
 import uuid
 import datetime
+
 
 class SyncStatusResponse(BaseModel):
     repository_id: uuid.UUID

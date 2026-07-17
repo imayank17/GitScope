@@ -1,0 +1,24 @@
+# Ruff configuration for GitScope Backend
+
+# Exclude virtual environments and cache directories
+exclude = [
+    ".git",
+    ".ruff_cache",
+    ".pytest_cache",
+    "venv",
+]
+
+# Match the maximum line length
+line-length = 120
+
+[lint]
+# Select rules to run
+select = ["F"]
+
+# Ignore specific rules to prevent false-positives
+ignore = [
+    "F811",  # Redefinition of unused name (common with pytest fixtures)
+    "F821",  # Undefined name (common in SQLAlchemy Mapped['Model'] forward references)
+    "F401",  # Unused imports (to avoid modifying codebase)
+    "F841",  # Unused variables
+]

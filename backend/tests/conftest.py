@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 # 1. Force settings to use SQLite in-memory URL before importing session
 from app.core.config import settings
+
 settings.DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 # 2. Import database modules and patch session/engine
@@ -35,6 +36,7 @@ db_session.AsyncSessionLocal = TestingSessionLocal
 # 3. Intercept and override the lifespan to bypass PostgreSQL-specific ALTER TABLE migrations
 from app.main import app
 
+
 @asynccontextmanager
 async def test_lifespan(app_instance: FastAPI):
     # Set up http_client on app state
@@ -44,6 +46,7 @@ async def test_lifespan(app_instance: FastAPI):
     )
     yield
     await app_instance.state.http_client.aclose()
+
 
 # Override lifespan context
 app.router.lifespan_context = test_lifespan
@@ -75,9 +78,9 @@ async def init_db():
     # Create tables
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     yield
-    
+
     # Drop tables
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -94,16 +97,17 @@ async def db():
 @pytest.fixture(autouse=True)
 def override_db(db):
     from app.database.session import get_db
-    
+
     async def _get_db():
         yield db
-        
+
     app.dependency_overrides[get_db] = _get_db
     yield
     app.dependency_overrides.pop(get_db, None)
 
 
 # 8. HTTP Client Fixtures
+
 
 @pytest.fixture
 async def client():

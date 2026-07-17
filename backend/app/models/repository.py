@@ -47,8 +47,12 @@ class Repository(Base):
 
     # Repository Metadata
     language: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    default_branch: Mapped[str] = mapped_column(String(100), nullable=False, default="main")
-    visibility: Mapped[str] = mapped_column(String(50), nullable=False, default="public")
+    default_branch: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="main"
+    )
+    visibility: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="public"
+    )
 
     # Metrics
     stars: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

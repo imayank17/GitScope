@@ -43,14 +43,16 @@ async def test_get_repo_cached_in_db(git_repo_layer, db_repository, db):
     """
     # Since we didn't activate respx here, if it tries to call the API it will fail/raise
     repo = await git_repo_layer.get_repo("gitscope-org", "gitscope-core")
-    
+
     assert isinstance(repo, Repository)
     assert repo.id == db_repository.id
     assert repo.full_name == "gitscope-org/gitscope-core"
 
 
 @pytest.mark.anyio
-async def test_get_repo_not_cached_syncs_from_github(git_repo_layer, respx_mock_github, db):
+async def test_get_repo_not_cached_syncs_from_github(
+    git_repo_layer, respx_mock_github, db
+):
     """
     Test that if a repository does not exist in the database,
     it is fetched from GitHub and saved along with all related models.
@@ -58,27 +60,31 @@ async def test_get_repo_not_cached_syncs_from_github(git_repo_layer, respx_mock_
     # Verify DB is currently empty
     stmt = select(Repository).where(Repository.full_name == "test-owner/test-repo")
     assert (await db.execute(stmt)).scalars().first() is None
-    
+
     # Run sync from mock GitHub API
     repo = await git_repo_layer.get_repo("test-owner", "test-repo")
-    
+
     assert isinstance(repo, Repository)
     assert repo.full_name == "test-owner/test-repo"
     assert repo.sync_status == "COMPLETED"
-    
+
     # Query database to confirm persistence
-    stmt = select(Repository).where(Repository.full_name == "test-owner/test-repo").options(
-        selectinload(Repository.contributors),
-        selectinload(Repository.commits),
-        selectinload(Repository.languages),
-        selectinload(Repository.pull_requests),
-        selectinload(Repository.issues),
-        selectinload(Repository.snapshots),
+    stmt = (
+        select(Repository)
+        .where(Repository.full_name == "test-owner/test-repo")
+        .options(
+            selectinload(Repository.contributors),
+            selectinload(Repository.commits),
+            selectinload(Repository.languages),
+            selectinload(Repository.pull_requests),
+            selectinload(Repository.issues),
+            selectinload(Repository.snapshots),
+        )
     )
     db_repo = (await db.execute(stmt)).scalars().first()
     assert db_repo is not None
     assert db_repo.github_id == 123456789
-    
+
     # Verify child relations are mapped and saved
     assert len(db_repo.contributors) == 2
     assert len(db_repo.commits) == 2
@@ -86,41 +92,43 @@ async def test_get_repo_not_cached_syncs_from_github(git_repo_layer, respx_mock_
     assert len(db_repo.pull_requests) == 2
     assert len(db_repo.issues) == 1
     assert len(db_repo.snapshots) == 1
-    
+
     # Verify commit sha uniqueness check worked
     assert db_repo.commits[0].sha == "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"
 
 
 @pytest.mark.anyio
-async def test_get_repo_partial_failures_handled(git_repo_layer, respx_mock_github, github_repo_data, db):
+async def test_get_repo_partial_failures_handled(
+    git_repo_layer, respx_mock_github, github_repo_data, db
+):
     """
     Test that if optional GitHub endpoints fail (e.g. issues or languages),
     repository synchronization still succeeds with partial data.
     """
     # Cause the languages and issues endpoints to return 500 errors
-    respx_mock_github["get_languages"].mock(
-        return_value=Response(500)
-    )
-    respx_mock_github["get_issues"].mock(
-        return_value=Response(500)
-    )
-    
+    respx_mock_github["get_languages"].mock(return_value=Response(500))
+    respx_mock_github["get_issues"].mock(return_value=Response(500))
+
     repo = await git_repo_layer.get_repo("test-owner", "test-repo")
-    
+
     assert repo is not None
     assert repo.sync_status == "COMPLETED"
-    
+
     # Re-fetch from DB
-    stmt = select(Repository).where(Repository.full_name == "test-owner/test-repo").options(
-        selectinload(Repository.contributors),
-        selectinload(Repository.commits),
-        selectinload(Repository.languages),
-        selectinload(Repository.pull_requests),
-        selectinload(Repository.issues),
-        selectinload(Repository.snapshots),
+    stmt = (
+        select(Repository)
+        .where(Repository.full_name == "test-owner/test-repo")
+        .options(
+            selectinload(Repository.contributors),
+            selectinload(Repository.commits),
+            selectinload(Repository.languages),
+            selectinload(Repository.pull_requests),
+            selectinload(Repository.issues),
+            selectinload(Repository.snapshots),
+        )
     )
     db_repo = (await db.execute(stmt)).scalars().first()
-    
+
     assert len(db_repo.languages) == 0
     assert len(db_repo.issues) == 0
     # Contributors and commits should still be fetched
@@ -129,20 +137,26 @@ async def test_get_repo_partial_failures_handled(git_repo_layer, respx_mock_gith
 
 
 @pytest.mark.anyio
-async def test_get_contributors_cached_vs_live(git_repo_layer, db_repository, respx_mock_github):
+async def test_get_contributors_cached_vs_live(
+    git_repo_layer, db_repository, respx_mock_github
+):
     """
     Test that contributors are retrieved from the database when cached,
     or from the live API when not cached.
     """
     # Case 1: Cached in DB (returns database Contributor models)
-    contribs, total_pages = await git_repo_layer.get_contributors("gitscope-org", "gitscope-core")
+    contribs, total_pages = await git_repo_layer.get_contributors(
+        "gitscope-org", "gitscope-core"
+    )
     assert len(contribs) == 2
     assert isinstance(contribs[0], Contributor)
     assert contribs[0].login == "user-alice"
     assert total_pages == 1
-    
+
     # Case 2: Not Cached (calls GitHub API and returns lists of dicts)
-    contribs, total_pages = await git_repo_layer.get_contributors("test-owner", "test-repo")
+    contribs, total_pages = await git_repo_layer.get_contributors(
+        "test-owner", "test-repo"
+    )
     assert len(contribs) == 2
     assert isinstance(contribs[0], dict)
     assert contribs[0]["login"] == "contrib-1"
@@ -150,17 +164,21 @@ async def test_get_contributors_cached_vs_live(git_repo_layer, db_repository, re
 
 
 @pytest.mark.anyio
-async def test_get_commits_cached_vs_live(git_repo_layer, db_repository, respx_mock_github):
+async def test_get_commits_cached_vs_live(
+    git_repo_layer, db_repository, respx_mock_github
+):
     """
     Test that commits are retrieved from the database when cached,
     or from the live API when not cached.
     """
     # Case 1: Cached in DB
-    commits, total_pages = await git_repo_layer.get_commits("gitscope-org", "gitscope-core")
+    commits, total_pages = await git_repo_layer.get_commits(
+        "gitscope-org", "gitscope-core"
+    )
     assert len(commits) == 1
     assert isinstance(commits[0], Commit)
     assert commits[0].author_name == "Alice Smith"
-    
+
     # Case 2: Not Cached
     commits, total_pages = await git_repo_layer.get_commits("test-owner", "test-repo")
     assert len(commits) == 2
@@ -169,7 +187,9 @@ async def test_get_commits_cached_vs_live(git_repo_layer, db_repository, respx_m
 
 
 @pytest.mark.anyio
-async def test_get_languages_cached_vs_live(git_repo_layer, db_repository, respx_mock_github):
+async def test_get_languages_cached_vs_live(
+    git_repo_layer, db_repository, respx_mock_github
+):
     """
     Test that languages are retrieved from the database when cached,
     or from the live API when not cached.
@@ -179,7 +199,7 @@ async def test_get_languages_cached_vs_live(git_repo_layer, db_repository, respx
     assert len(langs) == 2
     assert isinstance(langs[0], Language)
     assert langs[0].name == "Python"
-    
+
     # Case 2: Not Cached
     langs = await git_repo_layer.get_languages("test-owner", "test-repo")
     assert isinstance(langs, dict)
@@ -187,38 +207,50 @@ async def test_get_languages_cached_vs_live(git_repo_layer, db_repository, respx
 
 
 @pytest.mark.anyio
-async def test_get_pull_requests_cached_vs_live(git_repo_layer, db_repository, respx_mock_github):
+async def test_get_pull_requests_cached_vs_live(
+    git_repo_layer, db_repository, respx_mock_github
+):
     """
     Test that pull requests are retrieved from the database when cached,
     or from the live API when not cached (with state filters).
     """
     # Case 1: Cached in DB
-    prs, total_pages = await git_repo_layer.get_pull_requests("gitscope-org", "gitscope-core", state="all")
+    prs, total_pages = await git_repo_layer.get_pull_requests(
+        "gitscope-org", "gitscope-core", state="all"
+    )
     assert len(prs) == 1
     assert isinstance(prs[0], PullRequest)
     assert prs[0].title == "Refactor: Optimize DB indices"
-    
+
     # Case 2: Not Cached
-    prs, total_pages = await git_repo_layer.get_pull_requests("test-owner", "test-repo", state="all")
+    prs, total_pages = await git_repo_layer.get_pull_requests(
+        "test-owner", "test-repo", state="all"
+    )
     assert len(prs) == 2
     assert isinstance(prs[0], dict)
     assert prs[0]["title"] == "Feature: Add Database layer"
 
 
 @pytest.mark.anyio
-async def test_get_issues_cached_vs_live(git_repo_layer, db_repository, respx_mock_github):
+async def test_get_issues_cached_vs_live(
+    git_repo_layer, db_repository, respx_mock_github
+):
     """
     Test that issues are retrieved from the database when cached,
     or from the live API when not cached (with state filters).
     """
     # Case 1: Cached in DB
-    issues, total_pages = await git_repo_layer.get_issues("gitscope-org", "gitscope-core", state="all")
+    issues, total_pages = await git_repo_layer.get_issues(
+        "gitscope-org", "gitscope-core", state="all"
+    )
     assert len(issues) == 1
     assert isinstance(issues[0], Issue)
     assert issues[0].title == "Bug: Snapshot division by zero"
-    
+
     # Case 2: Not Cached
-    issues, total_pages = await git_repo_layer.get_issues("test-owner", "test-repo", state="all")
+    issues, total_pages = await git_repo_layer.get_issues(
+        "test-owner", "test-repo", state="all"
+    )
     # Our mock setup filters pull requests out of the issues list (total: 3 items, 1 issue, 2 PRs)
     # So we expect 1 true issue to be returned
     assert len(issues) == 1

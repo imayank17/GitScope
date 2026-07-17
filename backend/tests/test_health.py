@@ -2,6 +2,7 @@ import pytest
 from httpx import AsyncClient
 from app.core.config import settings
 
+
 @pytest.mark.anyio
 async def test_root_endpoint(client: AsyncClient):
     """

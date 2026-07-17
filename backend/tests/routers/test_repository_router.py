@@ -25,9 +25,9 @@ async def test_analyze_repository_new(client, respx_mock_github):
     """
     response = await client.post(
         "/repositories/analyze",
-        json={"repo_url": "https://github.com/test-owner/test-repo"}
+        json={"repo_url": "https://github.com/test-owner/test-repo"},
     )
-    
+
     assert response.status_code == 200
     json_data = response.json()
     assert json_data["name"] == "test-repo"
@@ -42,10 +42,7 @@ async def test_analyze_repository_invalid_format(client):
     """
     Test that POST /repositories/analyze returns a 422 error for invalid URLs.
     """
-    response = await client.post(
-        "/repositories/analyze",
-        json={"repo_url": "gitscope"}
-    )
+    response = await client.post("/repositories/analyze", json={"repo_url": "gitscope"})
     assert response.status_code == 422
     assert "Invalid repository format" in response.json()["detail"]
 
@@ -55,7 +52,9 @@ async def test_repository_details_success(client, db_repository):
     """
     Test GET /github/{owner}/{repo} gets the details of a repository from cache.
     """
-    response = await client.get(f"/github/{db_repository.owner_login}/{db_repository.name}")
+    response = await client.get(
+        f"/github/{db_repository.owner_login}/{db_repository.name}"
+    )
     assert response.status_code == 200
     json_data = response.json()
     assert json_data["full_name"] == db_repository.full_name
@@ -69,7 +68,7 @@ async def test_repository_details_stale(client, respx_mock_github, db_repository
     Test GET /github/{owner}/{repo} triggers a background sync if the repository is stale.
     """
     from datetime import datetime, timedelta, timezone
-    
+
     # Set repository's last_synced_at to 10 days ago (stale)
     repo_id = db_repository.id
     stmt = select(Repository).where(Repository.id == repo_id)
@@ -77,10 +76,12 @@ async def test_repository_details_stale(client, respx_mock_github, db_repository
     repo.last_synced_at = datetime.now(timezone.utc) - timedelta(days=10)
     repo.sync_status = "COMPLETED"
     await db.commit()
-    
-    response = await client.get(f"/github/{db_repository.owner_login}/{db_repository.name}")
+
+    response = await client.get(
+        f"/github/{db_repository.owner_login}/{db_repository.name}"
+    )
     assert response.status_code == 200
-    
+
     # Verify repository status in database is transitioned to SYNCING or COMPLETED by background task
     db.expire_all()
     repo = (await db.execute(stmt)).scalars().first()
@@ -94,11 +95,11 @@ async def test_list_contributors(client, db_repository):
     """
     response = await client.get(
         f"/repositories/{db_repository.owner_login}/{db_repository.name}/contributors",
-        params={"page": 1, "per_page": 1}
+        params={"page": 1, "per_page": 1},
     )
     assert response.status_code == 200
     json_data = response.json()
-    
+
     assert "items" in json_data
     assert json_data["page"] == 1
     assert json_data["per_page"] == 1
@@ -113,11 +114,11 @@ async def test_list_commits(client, db_repository):
     """
     response = await client.get(
         f"/repositories/{db_repository.owner_login}/{db_repository.name}/commits",
-        params={"page": 1, "per_page": 10}
+        params={"page": 1, "per_page": 10},
     )
     assert response.status_code == 200
     json_data = response.json()
-    
+
     assert len(json_data["items"]) == 1
     assert json_data["items"][0]["sha"] == "c0ffee112233445566778899aabbccddeeff0011"
 
@@ -127,10 +128,12 @@ async def test_get_languages(client, db_repository):
     """
     Test GET /repositories/{owner}/{repo}/languages returns total bytes and percentages.
     """
-    response = await client.get(f"/repositories/{db_repository.owner_login}/{db_repository.name}/languages")
+    response = await client.get(
+        f"/repositories/{db_repository.owner_login}/{db_repository.name}/languages"
+    )
     assert response.status_code == 200
     json_data = response.json()
-    
+
     assert json_data["total_bytes"] == 100000
     assert json_data["languages"]["Python"] == 90000
     assert json_data["percentages"]["Python"] == 90.0
@@ -144,11 +147,11 @@ async def test_list_pull_requests(client, db_repository):
     """
     response = await client.get(
         f"/repositories/{db_repository.owner_login}/{db_repository.name}/pulls",
-        params={"state": "open"}
+        params={"state": "open"},
     )
     assert response.status_code == 200
     json_data = response.json()
-    
+
     assert len(json_data["items"]) == 1
     assert json_data["items"][0]["number"] == 5
     assert json_data["items"][0]["state"] == "open"
@@ -161,11 +164,11 @@ async def test_list_issues(client, db_repository):
     """
     response = await client.get(
         f"/repositories/{db_repository.owner_login}/{db_repository.name}/issues",
-        params={"state": "open"}
+        params={"state": "open"},
     )
     assert response.status_code == 200
     json_data = response.json()
-    
+
     assert len(json_data["items"]) == 1
     assert json_data["items"][0]["number"] == 42
     assert json_data["items"][0]["state"] == "open"
@@ -185,7 +188,7 @@ async def test_private_mapping_helpers_with_dicts():
         _build_issue,
         _build_language_response,
     )
-    
+
     # Test _build_repo_response with dict
     repo_dict = {
         "name": "test-repo",
@@ -203,34 +206,38 @@ async def test_private_mapping_helpers_with_dicts():
         "updated_at": "2026-01-01T00:00:00Z",
         "html_url": "https://github.com/...",
         "clone_url": "https://github.com/...",
-        "owner": {"login": "test-owner", "avatar_url": "https://..."}
+        "owner": {"login": "test-owner", "avatar_url": "https://..."},
     }
     res_repo = _build_repo_response(repo_dict)
     assert res_repo.name == "test-repo"
-    
+
     # Test _build_contributor with dict
     contrib_dict = {
         "login": "alice",
         "avatar_url": "https://...",
         "contributions": 5,
-        "html_url": "https://..."
+        "html_url": "https://...",
     }
     res_contrib = _build_contributor(contrib_dict)
     assert res_contrib.login == "alice"
-    
+
     # Test _build_commit with dict
     commit_dict = {
         "sha": "sha123",
         "commit": {
             "message": "msg",
-            "author": {"name": "alice", "email": "alice@gmail.com", "date": "2026-01-01T00:00:00Z"},
-            "committer": {"name": "alice"}
+            "author": {
+                "name": "alice",
+                "email": "alice@gmail.com",
+                "date": "2026-01-01T00:00:00Z",
+            },
+            "committer": {"name": "alice"},
         },
-        "html_url": "https://..."
+        "html_url": "https://...",
     }
     res_commit = _build_commit(commit_dict)
     assert res_commit.sha == "sha123"
-    
+
     # Test _build_pull_request with dict
     pr_dict = {
         "number": 1,
@@ -242,11 +249,11 @@ async def test_private_mapping_helpers_with_dicts():
         "html_url": "https://...",
         "labels": [],
         "merged_at": None,
-        "draft": False
+        "draft": False,
     }
     res_pr = _build_pull_request(pr_dict)
     assert res_pr.number == 1
-    
+
     # Test _build_issue with dict
     issue_dict = {
         "number": 2,
@@ -257,11 +264,11 @@ async def test_private_mapping_helpers_with_dicts():
         "updated_at": "2026-01-01T00:00:00Z",
         "html_url": "https://...",
         "labels": [],
-        "comments": 0
+        "comments": 0,
     }
     res_issue = _build_issue(issue_dict)
     assert res_issue.number == 2
-    
+
     # Test _build_language_response with empty dict (total <= 0)
     res_lang = _build_language_response({})
     assert res_lang.total_bytes == 0

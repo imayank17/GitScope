@@ -18,12 +18,12 @@ def clean_logs_dir():
     old_to_file = settings.LOG_TO_FILE
     settings.LOG_DIRECTORY = test_logs_dir
     settings.LOG_TO_FILE = True
-    
+
     if os.path.exists(test_logs_dir):
         shutil.rmtree(test_logs_dir)
-        
+
     yield
-    
+
     # Restore settings
     settings.LOG_DIRECTORY = old_dir
     settings.LOG_TO_FILE = old_to_file
@@ -44,7 +44,7 @@ async def test_log_format_and_utc_time():
     """Verify log structure, pipe separation, and UTC time format (YYYY-MM-DD HH:MM:SS)."""
     formatter = UTCFormatter(
         fmt="%(asctime)s | %(levelname)s | %(module)s | %(funcName)s | line %(lineno)d | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
     # Create mock record
     record = logging.LogRecord(
@@ -55,11 +55,11 @@ async def test_log_format_and_utc_time():
         msg="Test log message",
         args=(),
         exc_info=None,
-        func="test_function"
+        func="test_function",
     )
-    
+
     formatted = formatter.format(record)
-    
+
     # Assert format pattern: 2026-07-16 18:42:15 | INFO | test_logging | test_function | line 10 | Test log message
     parts = [p.strip() for p in formatted.split("|")]
     assert len(parts) == 6
@@ -68,7 +68,7 @@ async def test_log_format_and_utc_time():
     assert parts[3] == "test_function"
     assert parts[4] == "line 10"
     assert parts[5] == "Test log message"
-    
+
     # Assert timestamp matches UTC year/date
     timestamp = parts[0]
     struct_time = time.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
@@ -79,8 +79,7 @@ async def test_log_format_and_utc_time():
 async def test_colored_console_formatter():
     """Verify console levelname is colorized and original levelname remains unmodified."""
     formatter = ColoredFormatter(
-        fmt="%(levelname)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        fmt="%(levelname)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
     record = logging.LogRecord(
         name="test_logger",
@@ -90,7 +89,7 @@ async def test_colored_console_formatter():
         msg="Message",
         args=(),
         exc_info=None,
-        func="test_func"
+        func="test_func",
     )
     formatted = formatter.format(record)
     assert "\033[32m" in formatted
@@ -102,20 +101,20 @@ async def test_colored_console_formatter():
 async def test_separate_domain_log_files():
     """Verify that domain logs are written to separate log files and error logs are filtered."""
     setup_logging()
-    
+
     app_logger = get_logger("app.main")
     github_logger = get_logger("app.services.github_service")
     sync_logger = get_logger("app.services.sync_service")
     repo_logger = get_logger("app.repositories.github_repository")
-    
+
     app_logger.info("General app log event")
     github_logger.info("GitHub service specific event")
     sync_logger.warning("Sync warning event")
     repo_logger.info("Repository db operation event")
     app_logger.error("Severe app error event")
-    
+
     time.sleep(0.1)
-    
+
     app_log_path = os.path.join(settings.LOG_DIRECTORY, "app.log")
     assert os.path.exists(app_log_path)
     with open(app_log_path, "r") as f:
@@ -125,7 +124,7 @@ async def test_separate_domain_log_files():
         assert "Sync warning event" in app_content
         assert "Repository db operation event" in app_content
         assert "Severe app error event" in app_content
-        
+
     error_log_path = os.path.join(settings.LOG_DIRECTORY, "error.log")
     assert os.path.exists(error_log_path)
     with open(error_log_path, "r") as f:
@@ -156,24 +155,27 @@ async def test_rate_limit_warning_log(caplog):
     """Test that GitHubService logs warning messages if rate limits are low."""
     import httpx
     from app.services.github_service import GitHubService
-    
+
     headers = {
         "X-RateLimit-Limit": "5000",
         "X-RateLimit-Remaining": "9",
-        "X-RateLimit-Reset": "1672531199"
+        "X-RateLimit-Reset": "1672531199",
     }
-    
+
     with respx.mock:
         respx.get("https://api.github.com/repos/test-owner/test-repo").mock(
             return_value=Response(200, json={"name": "test-repo"}, headers=headers)
         )
-        
+
         async with httpx.AsyncClient() as raw_client:
             service = GitHubService(raw_client)
             with caplog.at_level(logging.WARNING):
                 await service.get_repository("test-owner", "test-repo")
-            
-        assert any("Rate limit warning: low remaining requests" in record.message for record in caplog.records)
+
+        assert any(
+            "Rate limit warning: low remaining requests" in record.message
+            for record in caplog.records
+        )
 
 
 @pytest.mark.anyio
@@ -182,7 +184,7 @@ async def test_request_logging_middleware(client, caplog):
     with caplog.at_level(logging.INFO):
         response = await client.get("/health")
         assert response.status_code == 200
-        
+
     log_messages = [record.message for record in caplog.records]
     assert any("Incoming Request: GET /health" in msg for msg in log_messages)
     assert any("Response: GET /health | Status: 200" in msg for msg in log_messages)
@@ -195,10 +197,15 @@ async def test_database_session_failure_log(caplog):
     from unittest.mock import patch
     from sqlalchemy.exc import SQLAlchemyError
 
-    with patch("app.database.session.AsyncSessionLocal", side_effect=SQLAlchemyError("Connection refused")):
+    with patch(
+        "app.database.session.AsyncSessionLocal",
+        side_effect=SQLAlchemyError("Connection refused"),
+    ):
         with pytest.raises(SQLAlchemyError):
             async for _ in get_db():
                 pass
-                
-    assert any("Failed to establish database session" in record.message for record in caplog.records)
 
+    assert any(
+        "Failed to establish database session" in record.message
+        for record in caplog.records
+    )

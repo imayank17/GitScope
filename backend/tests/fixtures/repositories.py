@@ -9,6 +9,7 @@ from app.models.pull_request import PullRequest
 from app.models.language import Language
 from app.models.snapshot import RepositorySnapshot
 
+
 @pytest.fixture
 def sample_repo_dict():
     """Returns a dict representation of a Repository for easy validation or insertion."""
@@ -30,8 +31,9 @@ def sample_repo_dict():
         "watchers": 100,
         "topics": ["metrics", "analytics", "github-api"],
         "github_created_at": "2026-02-15T08:00:00Z",
-        "github_updated_at": "2026-07-10T12:00:00Z"
+        "github_updated_at": "2026-07-10T12:00:00Z",
     }
+
 
 @pytest.fixture
 async def db_repository(db, sample_repo_dict):
@@ -59,7 +61,7 @@ async def db_repository(db, sample_repo_dict):
         sync_status="COMPLETED",
         last_synced_at=datetime.now(timezone.utc),
     )
-    
+
     # Add associated contributors
     repo.contributors = [
         Contributor(
@@ -67,17 +69,17 @@ async def db_repository(db, sample_repo_dict):
             login="user-alice",
             avatar_url="https://avatars.githubusercontent.com/u/901",
             html_url="https://github.com/user-alice",
-            contributions=120
+            contributions=120,
         ),
         Contributor(
             github_id=902,
             login="user-bob",
             avatar_url="https://avatars.githubusercontent.com/u/902",
             html_url="https://github.com/user-bob",
-            contributions=40
-        )
+            contributions=40,
+        ),
     ]
-    
+
     # Add commits
     repo.commits = [
         Commit(
@@ -87,10 +89,10 @@ async def db_repository(db, sample_repo_dict):
             author_email="alice@gitscope.org",
             author_date="2026-07-01T10:00:00Z",
             committer_name="Alice Smith",
-            html_url="https://github.com/gitscope-org/gitscope-core/commit/c0ffee112233"
+            html_url="https://github.com/gitscope-org/gitscope-core/commit/c0ffee112233",
         )
     ]
-    
+
     # Add issues
     repo.issues = [
         Issue(
@@ -102,10 +104,10 @@ async def db_repository(db, sample_repo_dict):
             comments=2,
             html_url="https://github.com/gitscope-org/gitscope-core/issues/42",
             github_created_at="2026-07-02T11:00:00Z",
-            github_updated_at="2026-07-02T13:00:00Z"
+            github_updated_at="2026-07-02T13:00:00Z",
         )
     ]
-    
+
     # Add pull requests
     repo.pull_requests = [
         PullRequest(
@@ -118,16 +120,16 @@ async def db_repository(db, sample_repo_dict):
             merged_at=None,
             html_url="https://github.com/gitscope-org/gitscope-core/pull/5",
             github_created_at="2026-07-03T09:00:00Z",
-            github_updated_at="2026-07-04T10:00:00Z"
+            github_updated_at="2026-07-04T10:00:00Z",
         )
     ]
-    
+
     # Add languages
     repo.languages = [
         Language(name="Python", bytes=90000, percentage=90.0),
-        Language(name="Shell", bytes=10000, percentage=10.0)
+        Language(name="Shell", bytes=10000, percentage=10.0),
     ]
-    
+
     # Add daily snapshot history
     repo.snapshots = [
         RepositorySnapshot(
@@ -137,10 +139,10 @@ async def db_repository(db, sample_repo_dict):
             open_issues=10,
             watchers=100,
             commit_count=1,
-            pull_request_count=1
+            pull_request_count=1,
         )
     ]
-    
+
     db.add(repo)
     await db.commit()
     await db.refresh(repo)

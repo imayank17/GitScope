@@ -15,7 +15,9 @@ class AnalyticsService:
         """
         self.db = db
 
-    async def get_metrics_history(self, repository_id: uuid.UUID) -> List[RepositorySnapshot]:
+    async def get_metrics_history(
+        self, repository_id: uuid.UUID
+    ) -> List[RepositorySnapshot]:
         """
         Retrieve all daily historical metrics snapshots for a given repository ID,
         ordered chronologically.
@@ -23,7 +25,9 @@ class AnalyticsService:
         stmt = (
             select(RepositorySnapshot)
             .where(RepositorySnapshot.repository_id == repository_id)
-            .order_by(RepositorySnapshot.date.asc(), RepositorySnapshot.created_at.asc())
+            .order_by(
+                RepositorySnapshot.date.asc(), RepositorySnapshot.created_at.asc()
+            )
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())

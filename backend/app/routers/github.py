@@ -48,20 +48,22 @@ from app.schemas.github import (
     RepositoryRefreshResponse,
 )
 
-
 router = APIRouter(tags=["GitHub"])
 
 
 # Enums for query parameters
 
+
 class StateFilter(str, Enum):
     """Valid states for filtering pull requests and issues."""
+
     open = "open"
     closed = "closed"
     all = "all"
 
 
 # Private helpers — URL parsing & response building
+
 
 def _parse_repo_url(repo_url: str) -> tuple[str, str]:
     """
@@ -89,7 +91,7 @@ def _parse_repo_url(repo_url: str) -> tuple[str, str]:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid repository format: '{repo_url}'. "
-                   f"Use 'owner/repo' or 'https://github.com/owner/repo'.",
+            f"Use 'owner/repo' or 'https://github.com/owner/repo'.",
         )
 
     return segments[0], segments[1]
@@ -268,6 +270,7 @@ def _build_issue(data) -> IssueResponse:
 
 #  Endpoints (unchanged)
 
+
 async def _get_or_analyze_repo(
     owner: str,
     repo: str,
@@ -277,12 +280,17 @@ async def _get_or_analyze_repo(
     background_tasks: BackgroundTasks,
 ) -> Repository:
     from sqlalchemy import func
-    stmt = select(Repository).where(func.lower(Repository.full_name) == f"{owner}/{repo}".lower())
+
+    stmt = select(Repository).where(
+        func.lower(Repository.full_name) == f"{owner}/{repo}".lower()
+    )
     db_repo = (await db.execute(stmt)).scalars().first()
 
     if not db_repo:
         # Does not exist, run full synchronous fetch and insert
-        logger.info(f"Repository {owner}/{repo} not found in database. Initiating synchronous repository analysis.")
+        logger.info(
+            f"Repository {owner}/{repo} not found in database. Initiating synchronous repository analysis."
+        )
         db_repo = await repository.get_repo(owner, repo)
         return db_repo
 
@@ -292,17 +300,24 @@ async def _get_or_analyze_repo(
     if last_synced and last_synced.tzinfo is None:
         last_synced = last_synced.replace(tzinfo=timezone.utc)
 
-    is_fresh = last_synced is not None and (now - last_synced).total_seconds() < settings.SYNC_TTL_SECONDS
+    is_fresh = (
+        last_synced is not None
+        and (now - last_synced).total_seconds() < settings.SYNC_TTL_SECONDS
+    )
 
     if not is_fresh:
         # Stale: trigger background revalidation
         if db_repo.sync_status != "SYNCING":
-            logger.info(f"Repository {owner}/{repo} cache is stale. Triggering background revalidation task.")
+            logger.info(
+                f"Repository {owner}/{repo} cache is stale. Triggering background revalidation task."
+            )
             db_repo.sync_status = "SYNCING"
             await db.commit()
             background_tasks.add_task(sync_service.sync_repository_task, db_repo.id)
         else:
-            logger.info(f"Repository {owner}/{repo} cache is stale, but background sync is already in progress.")
+            logger.info(
+                f"Repository {owner}/{repo} cache is stale, but background sync is already in progress."
+            )
     else:
         logger.info(f"Repository {owner}/{repo} cache is fresh.")
 
@@ -315,7 +330,7 @@ async def _get_or_analyze_repo(
     status_code=status.HTTP_200_OK,
     summary="Analyze a GitHub repository",
     description="Accepts a GitHub repo URL or 'owner/repo' string, "
-                "fetches metadata from GitHub, and returns a clean JSON response.",
+    "fetches metadata from GitHub, and returns a clean JSON response.",
 )
 async def analyze_repository(
     request: RepositoryAnalyzeRequest,
@@ -353,25 +368,31 @@ async def repository_details(
 
 #  Endpoints — Contributors
 
+
 @router.get(
     "/repositories/{owner}/{repo}/contributors",
     response_model=PaginatedResponse,
     summary="List repository contributors",
     description="Fetch contributors sorted by number of contributions. "
-                "Supports pagination via page and per_page query params.",
+    "Supports pagination via page and per_page query params.",
 )
 async def list_contributors(
     owner: str,
     repo: str,
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)."),
     per_page: int = Query(
-        default=30, ge=1, le=100,
+        default=30,
+        ge=1,
+        le=100,
         description="Results per page (max 100).",
     ),
     repository: GitHubRepository = Depends(get_github_repository),
 ) -> PaginatedResponse:
     items, total_pages = await repository.get_contributors(
-        owner, repo, page, per_page,
+        owner,
+        repo,
+        page,
+        per_page,
     )
 
     return PaginatedResponse(
@@ -382,27 +403,33 @@ async def list_contributors(
     )
 
 
-#Endpoints — Commits
+# Endpoints — Commits
+
 
 @router.get(
     "/repositories/{owner}/{repo}/commits",
     response_model=PaginatedResponse,
     summary="List repository commits",
     description="Fetch commits ordered by date (most recent first). "
-                "Supports pagination via page and per_page query params.",
+    "Supports pagination via page and per_page query params.",
 )
 async def list_commits(
     owner: str,
     repo: str,
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)."),
     per_page: int = Query(
-        default=30, ge=1, le=100,
+        default=30,
+        ge=1,
+        le=100,
         description="Results per page (max 100).",
     ),
     repository: GitHubRepository = Depends(get_github_repository),
 ) -> PaginatedResponse:
     items, total_pages = await repository.get_commits(
-        owner, repo, page, per_page,
+        owner,
+        repo,
+        page,
+        per_page,
     )
 
     return PaginatedResponse(
@@ -415,12 +442,13 @@ async def list_commits(
 
 # Endpoints — Languages
 
+
 @router.get(
     "/repositories/{owner}/{repo}/languages",
     response_model=LanguageResponse,
     summary="Get repository language breakdown",
     description="Fetch the language composition of a repository. "
-                "Returns raw byte counts and calculated percentages.",
+    "Returns raw byte counts and calculated percentages.",
 )
 async def get_languages(
     owner: str,
@@ -435,12 +463,13 @@ async def get_languages(
 
 #  Endpoints — Pull Requests
 
+
 @router.get(
     "/repositories/{owner}/{repo}/pulls",
     response_model=PaginatedResponse,
     summary="List repository pull requests",
     description="Fetch pull requests filtered by state. "
-                "Supports pagination via page and per_page query params.",
+    "Supports pagination via page and per_page query params.",
 )
 async def list_pull_requests(
     owner: str,
@@ -451,13 +480,19 @@ async def list_pull_requests(
     ),
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)."),
     per_page: int = Query(
-        default=30, ge=1, le=100,
+        default=30,
+        ge=1,
+        le=100,
         description="Results per page (max 100).",
     ),
     repository: GitHubRepository = Depends(get_github_repository),
 ) -> PaginatedResponse:
     items, total_pages = await repository.get_pull_requests(
-        owner, repo, state.value, page, per_page,
+        owner,
+        repo,
+        state.value,
+        page,
+        per_page,
     )
 
     return PaginatedResponse(
@@ -470,12 +505,13 @@ async def list_pull_requests(
 
 # Endpoints — Issues
 
+
 @router.get(
     "/repositories/{owner}/{repo}/issues",
     response_model=PaginatedResponse,
     summary="List repository issues",
     description="Fetch issues (excluding pull requests) filtered by state. "
-                "Supports pagination via page and per_page query params.",
+    "Supports pagination via page and per_page query params.",
 )
 async def list_issues(
     owner: str,
@@ -486,13 +522,19 @@ async def list_issues(
     ),
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)."),
     per_page: int = Query(
-        default=30, ge=1, le=100,
+        default=30,
+        ge=1,
+        le=100,
         description="Results per page (max 100).",
     ),
     repository: GitHubRepository = Depends(get_github_repository),
 ) -> PaginatedResponse:
     items, total_pages = await repository.get_issues(
-        owner, repo, state.value, page, per_page,
+        owner,
+        repo,
+        state.value,
+        page,
+        per_page,
     )
 
     return PaginatedResponse(
@@ -504,6 +546,7 @@ async def list_issues(
 
 
 # Synchronization & Analytics Endpoints
+
 
 @router.post(
     "/repositories/{id}/refresh",
