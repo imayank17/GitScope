@@ -35,6 +35,9 @@ async def lifespan(app: FastAPI):
 
     try:
         async with engine.begin() as conn:
+            # Create all tables (including the new repository_snapshots table)
+            await conn.run_sync(Base.metadata.create_all)
+
             # Safely expand repositories schema with new columns if they do not exist
             await conn.execute(
                 sa.text("ALTER TABLE repositories ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP WITH TIME ZONE;")
@@ -45,8 +48,6 @@ async def lifespan(app: FastAPI):
             await conn.execute(
                 sa.text("ALTER TABLE repositories ADD COLUMN IF NOT EXISTS sync_error TEXT;")
             )
-            # Create all tables (including the new repository_snapshots table)
-            await conn.run_sync(Base.metadata.create_all)
         
         logger.info("Database connected successfully and schema migrations validated.")
     except Exception as e:

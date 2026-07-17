@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useRepository } from '../hooks/useRepository';
 import { useSyncStatus, useRefreshRepository } from '../hooks/useSync';
